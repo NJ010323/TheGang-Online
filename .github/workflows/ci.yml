@@ -1,0 +1,59 @@
+name: Publish
+
+permissions:
+  contents: write
+
+on:
+  release:
+    types: [published]
+
+env:
+  DOTNET_VERSION: '8.0.x'
+
+defaults:
+  run:
+    working-directory: TheGang
+
+jobs:
+  release:
+    name: Release (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build and Package
+        shell: bash
+        run: |
+          tag=$(git describe --tags --abbrev=0)
+          version=${tag#v}
+          release_name="thegang-$tag-win-x64"
+
+          # Build
+          dotnet publish View/View.csproj -c Release -r win-x64 -f net8.0 \
+            -p:PublishSingleFile=true -p:SelfContained=false \
+            -p:DebugType=None -p:DebugSymbols=false \
+            -p:Version=$version -p:FileVersion=$version -p:InformationalVersion=$tag \
+            -o "$release_name"
+
+          # Pack to zip
+          7z a -tzip "${release_name}.zip" "./${release_name}/*"
+
+          # Move zip output
+          mv "${release_name}.zip" ..
+
+          # Delete output directory
+          rm -r "$release_name"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "thegang*.zip"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
