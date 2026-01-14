@@ -1,6 +1,6 @@
 using Model.Game.Tokens.TokenEnum;
 
-namespace Model.Game.Tokens;
+namespace Model.Game.Tokens.Interfaces;
 
 public interface IToken
 {
