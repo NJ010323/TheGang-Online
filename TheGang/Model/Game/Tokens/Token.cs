@@ -18,4 +18,9 @@ public class Token : IToken
         Value = value;
         Color = color;
     }
+
+    public string ToString()
+    {
+        throw new NotImplementedException();
+    }
 }
