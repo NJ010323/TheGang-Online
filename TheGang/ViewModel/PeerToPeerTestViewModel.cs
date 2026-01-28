@@ -356,7 +356,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
 
                     if (PeerToPeerSessionProtocol.TryParseChatMessage(line, out _, out var message))
                     {
-                        await HandleChatMessageAsync(connection, joinedPeer.DisplayName, message).ConfigureAwait(false);
+                        await HandleChatMessageAsync(joinedPeer.DisplayName, message).ConfigureAwait(false);
                     }
                 }
             }
@@ -621,7 +621,6 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
                 var sender = JoinDisplayName.Trim();
                 await _clientWriter.WriteLineAsync(PeerToPeerSessionProtocol.BuildChatMessage(sender, message))
                     .ConfigureAwait(false);
-                AddChatMessage(sender, message);
             }
             catch (IOException)
             {
@@ -632,10 +631,10 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         PostToUi(() => ChatInput = string.Empty);
     }
 
-    private async Task HandleChatMessageAsync(ClientConnection senderConnection, string sender, string message)
+    private async Task HandleChatMessageAsync(string sender, string message)
     {
         AddChatMessage(sender, message);
-        await BroadcastChatMessageAsync(sender, message, senderConnection).ConfigureAwait(false);
+        await BroadcastChatMessageAsync(sender, message).ConfigureAwait(false);
     }
 
     private void AddChatMessage(string sender, string message)
@@ -652,10 +651,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         PostToUi(() => _chatMessages.Add($"[{time}] {safeSender} : {safeMessage}"));
     }
 
-    private async Task BroadcastChatMessageAsync(
-        string sender,
-        string message,
-        ClientConnection? excludedConnection = null)
+    private async Task BroadcastChatMessageAsync(string sender, string message)
     {
         List<ClientConnection> connections;
         lock (_clientSync)
@@ -673,11 +669,6 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
 
         foreach (var connection in connections)
         {
-            if (excludedConnection is not null && ReferenceEquals(connection, excludedConnection))
-            {
-                continue;
-            }
-
             try
             {
                 await connection.Writer.WriteLineAsync(payload).ConfigureAwait(false);
