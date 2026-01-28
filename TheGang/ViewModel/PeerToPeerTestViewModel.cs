@@ -621,6 +621,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
                 var sender = JoinDisplayName.Trim();
                 await _clientWriter.WriteLineAsync(PeerToPeerSessionProtocol.BuildChatMessage(sender, message))
                     .ConfigureAwait(false);
+                await _clientWriter.FlushAsync().ConfigureAwait(false);
             }
             catch (IOException)
             {
@@ -672,6 +673,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
             try
             {
                 await connection.Writer.WriteLineAsync(payload).ConfigureAwait(false);
+                await connection.Writer.FlushAsync().ConfigureAwait(false);
             }
             catch (IOException)
             {
