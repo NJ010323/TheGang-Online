@@ -14,6 +14,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
     private CancellationTokenSource? _listenerCts;
     private TcpListener? _listener;
     private TcpClient? _clientConnection;
+    private CancellationTokenSource? _clientMonitorCts;
     private PeerToPeerSession? _session;
     private bool _isHosting;
     private bool _isConnected;
@@ -381,6 +382,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
             }
 
             _clientConnection = client;
+            StartClientMonitor(stream);
             PostToUi(() =>
             {
                 IsConnected = true;
@@ -400,8 +402,12 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
     private void Disconnect()
     {
         CloseClientConnection();
-        IsConnected = false;
-        StatusMessage = "Déconnecté.";
+        PostToUi(() =>
+        {
+            IsConnected = false;
+            _peers.Clear();
+            StatusMessage = "Déconnecté.";
+        });
     }
 
     private bool ValidateHostInputs(out string message)
@@ -473,8 +479,55 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
     /// </summary>
     private void CloseClientConnection()
     {
+        _clientMonitorCts?.Cancel();
+        _clientMonitorCts?.Dispose();
+        _clientMonitorCts = null;
         _clientConnection?.Close();
         _clientConnection = null;
+    }
+
+    /// <summary>
+    /// Surveille la connexion client afin de détecter la déconnexion côté hôte.
+    /// </summary>
+    private void StartClientMonitor(NetworkStream stream)
+    {
+        _clientMonitorCts?.Cancel();
+        _clientMonitorCts?.Dispose();
+        _clientMonitorCts = new CancellationTokenSource();
+
+        var token = _clientMonitorCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+                while (!token.IsCancellationRequested)
+                {
+                    var line = await reader.ReadLineAsync(token).ConfigureAwait(false);
+                    if (line is null)
+                    {
+                        break;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                PostToUi(() =>
+                {
+                    IsConnected = false;
+                    _peers.Clear();
+                    StatusMessage = "Déconnecté.";
+                });
+            }
+        }, token);
     }
 
     /// <summary>
