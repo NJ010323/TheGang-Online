@@ -356,7 +356,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
 
                     if (PeerToPeerSessionProtocol.TryParseChatMessage(line, out _, out var message))
                     {
-                        await HandleChatMessageAsync(joinedPeer.DisplayName, message).ConfigureAwait(false);
+                        await HandleChatMessageAsync(connection, joinedPeer.DisplayName, message).ConfigureAwait(false);
                     }
                 }
             }
@@ -632,10 +632,10 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         PostToUi(() => ChatInput = string.Empty);
     }
 
-    private async Task HandleChatMessageAsync(string sender, string message)
+    private async Task HandleChatMessageAsync(ClientConnection senderConnection, string sender, string message)
     {
         AddChatMessage(sender, message);
-        await BroadcastChatMessageAsync(sender, message, sender).ConfigureAwait(false);
+        await BroadcastChatMessageAsync(sender, message, senderConnection).ConfigureAwait(false);
     }
 
     private void AddChatMessage(string sender, string message)
@@ -652,7 +652,10 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         PostToUi(() => _chatMessages.Add($"[{time}] {safeSender} : {safeMessage}"));
     }
 
-    private async Task BroadcastChatMessageAsync(string sender, string message, string? excludedSender = null)
+    private async Task BroadcastChatMessageAsync(
+        string sender,
+        string message,
+        ClientConnection? excludedConnection = null)
     {
         List<ClientConnection> connections;
         lock (_clientSync)
@@ -670,8 +673,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
 
         foreach (var connection in connections)
         {
-            if (!string.IsNullOrWhiteSpace(excludedSender)
-                && connection.DisplayName.Equals(excludedSender, StringComparison.OrdinalIgnoreCase))
+            if (excludedConnection is not null && ReferenceEquals(connection, excludedConnection))
             {
                 continue;
             }
