@@ -15,15 +15,24 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
     private TcpListener? _listener;
     private TcpClient? _clientConnection;
     private CancellationTokenSource? _clientMonitorCts;
+    // Connexion de contrôle utilisée par l'hôte pour recevoir les demandes JOIN.
+    private TcpClient? _relayHostControlClient;
+    private CancellationTokenSource? _relayHostCts;
     private PeerToPeerSession? _session;
     private bool _isHosting;
     private bool _isConnected;
+    // Active le mode relais (utile quand les joueurs ne sont pas sur le même réseau).
+    private bool _useRelay;
     private string _hostDisplayName = "Host";
     private string _joinDisplayName = "Guest";
     private string _joinAddress = "127.0.0.1";
     private int _hostPort = 7777;
     private int _joinPort = 7777;
     private int _maxPeers = 2;
+    // Paramètres du relais.
+    private string _relayAddress = "localhost";
+    private int _relayPort = 9000;
+    private string _relaySessionCode = "GANG-SESSION";
     private string _statusMessage = "Prêt à tester.";
 
     public PeerToPeerTestViewModel()
@@ -84,6 +93,21 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         }
     }
 
+    public bool UseRelay
+    {
+        get => _useRelay;
+        set
+        {
+            if (_useRelay == value)
+            {
+                return;
+            }
+
+            _useRelay = value;
+            OnPropertyChanged();
+        }
+    }
+
     public int HostPort
     {
         get => _hostPort;
@@ -125,6 +149,51 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
             }
 
             _maxPeers = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string RelayAddress
+    {
+        get => _relayAddress;
+        set
+        {
+            if (_relayAddress == value)
+            {
+                return;
+            }
+
+            _relayAddress = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public int RelayPort
+    {
+        get => _relayPort;
+        set
+        {
+            if (_relayPort == value)
+            {
+                return;
+            }
+
+            _relayPort = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string RelaySessionCode
+    {
+        get => _relaySessionCode;
+        set
+        {
+            if (_relaySessionCode == value)
+            {
+                return;
+            }
+
+            _relaySessionCode = value;
             OnPropertyChanged();
         }
     }
@@ -216,27 +285,49 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         _session = PeerToPeerSession.CreateHost(HostDisplayName.Trim(), MaxPeers);
         _peers.Add(PeerToPeerSessionProtocol.FormatHostDisplayName(_session.Host.DisplayName));
 
-        _listenerCts = new CancellationTokenSource();
-        _listener = new TcpListener(IPAddress.Any, HostPort);
-        _listener.Start();
+        if (UseRelay)
+        {
+            // En mode relais, l'hôte ouvre une connexion de contrôle vers le serveur.
+            _relayHostCts = new CancellationTokenSource();
+            _ = Task.Run(() => StartRelayHostAsync(_relayHostCts.Token));
+        }
+        else
+        {
+            // En mode direct, on écoute localement sur un port TCP.
+            _listenerCts = new CancellationTokenSource();
+            _listener = new TcpListener(IPAddress.Any, HostPort);
+            _listener.Start();
+            _ = Task.Run(() => AcceptLoopAsync(_listenerCts.Token));
+        }
+
         IsHosting = true;
 
-        StatusMessage = $"Hôte lancé sur le port {HostPort}.";
-
-        _ = Task.Run(() => AcceptLoopAsync(_listenerCts.Token));
+        StatusMessage = UseRelay
+            ? $"Hôte lancé via relais {RelayAddress}:{RelayPort} (code: {RelaySessionCode})."
+            : $"Hôte lancé sur le port {HostPort}.";
         return Task.CompletedTask;
     }
 
     private void StopHost()
     {
+        StopHost("Hôte arrêté.");
+    }
+
+    private void StopHost(string statusMessage)
+    {
         _listenerCts?.Cancel();
         _listener?.Stop();
         _listener = null;
         _listenerCts = null;
+        _relayHostCts?.Cancel();
+        _relayHostCts?.Dispose();
+        _relayHostCts = null;
+        _relayHostControlClient?.Close();
+        _relayHostControlClient = null;
         _session = null;
         IsHosting = false;
         _peers.Clear();
-        StatusMessage = "Hôte arrêté.";
+        StatusMessage = statusMessage;
     }
 
     /// <summary>
@@ -352,10 +443,50 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
             CloseClientConnection();
 
             var client = new TcpClient();
-            await client.ConnectAsync(JoinAddress.Trim(), JoinPort).ConfigureAwait(false);
+            if (UseRelay)
+            {
+                // En mode relais, on se connecte au serveur public plutôt qu'à l'hôte directement.
+                await client.ConnectAsync(RelayAddress.Trim(), RelayPort).ConfigureAwait(false);
+            }
+            else
+            {
+                await client.ConnectAsync(JoinAddress.Trim(), JoinPort).ConfigureAwait(false);
+            }
             var stream = client.GetStream();
             await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
             using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+
+            if (UseRelay)
+            {
+                // Handshake relais: JOIN -> WAIT -> READY.
+                await writer.WriteLineAsync($"JOIN {RelaySessionCode.Trim()}").ConfigureAwait(false);
+                var relayResponse = await reader.ReadLineAsync().ConfigureAwait(false);
+                if (relayResponse is null)
+                {
+                    StatusMessage = "Le relais a fermé la connexion.";
+                    client.Close();
+                    return;
+                }
+
+                if (relayResponse.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
+                {
+                    StatusMessage = relayResponse.Replace("ERROR:", "Erreur: ", StringComparison.OrdinalIgnoreCase);
+                    client.Close();
+                    return;
+                }
+
+                if (!relayResponse.Equals("READY", StringComparison.OrdinalIgnoreCase))
+                {
+                    relayResponse = await reader.ReadLineAsync().ConfigureAwait(false);
+                }
+
+                if (!string.Equals(relayResponse, "READY", StringComparison.OrdinalIgnoreCase))
+                {
+                    StatusMessage = "Le relais n'a pas pu établir la connexion.";
+                    client.Close();
+                    return;
+                }
+            }
 
             await writer.WriteLineAsync(JoinDisplayName.Trim()).ConfigureAwait(false);
             var response = await reader.ReadLineAsync().ConfigureAwait(false);
@@ -392,7 +523,88 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         }
         catch (SocketException)
         {
-            StatusMessage = "Impossible de se connecter à l'hôte. Vérifiez l'adresse et le port.";
+            StatusMessage = UseRelay
+                ? "Impossible de se connecter au relais. Vérifiez l'adresse, le port et le code."
+                : "Impossible de se connecter à l'hôte. Vérifiez l'adresse et le port.";
+        }
+    }
+
+    private async Task StartRelayHostAsync(CancellationToken token)
+    {
+        try
+        {
+            // Connexion de contrôle de l'hôte vers le relais.
+            var client = new TcpClient();
+            await client.ConnectAsync(RelayAddress.Trim(), RelayPort).ConfigureAwait(false);
+            _relayHostControlClient = client;
+
+            var stream = client.GetStream();
+            await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
+            using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+
+            await writer.WriteLineAsync($"HOST {RelaySessionCode.Trim()}").ConfigureAwait(false);
+            var response = await reader.ReadLineAsync().ConfigureAwait(false);
+            if (response is null)
+            {
+                PostToUi(() =>
+                {
+                    StopHost("Connexion au relais interrompue.");
+                });
+                return;
+            }
+
+            if (response.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
+            {
+                PostToUi(() =>
+                {
+                    StopHost(response.Replace("ERROR:", "Erreur: ", StringComparison.OrdinalIgnoreCase));
+                });
+                return;
+            }
+
+            while (!token.IsCancellationRequested)
+            {
+                var line = await reader.ReadLineAsync(token).ConfigureAwait(false);
+                if (line is null)
+                {
+                    break;
+                }
+
+                if (line.StartsWith("CONNECT ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var tokenValue = line["CONNECT ".Length..].Trim();
+                    if (!string.IsNullOrWhiteSpace(tokenValue))
+                    {
+                        // Chaque invité déclenche une connexion DATA dédiée.
+                        _ = Task.Run(() => AcceptRelayClientAsync(tokenValue, token), token);
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (SocketException)
+        {
+            PostToUi(() => StopHost("Impossible de joindre le relais."));
+        }
+    }
+
+    private async Task AcceptRelayClientAsync(string relayToken, CancellationToken token)
+    {
+        try
+        {
+            // Connexion DATA dédiée pour un invité spécifique.
+            var client = new TcpClient();
+            await client.ConnectAsync(RelayAddress.Trim(), RelayPort).ConfigureAwait(false);
+            var stream = client.GetStream();
+            await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
+            await writer.WriteLineAsync($"DATA {relayToken}").ConfigureAwait(false);
+            await HandleClientAsync(client, token).ConfigureAwait(false);
+        }
+        catch (SocketException)
+        {
+            PostToUi(() => StatusMessage = "Le relais n'a pas pu établir une connexion client.");
         }
     }
 
@@ -424,9 +636,14 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
             return false;
         }
 
-        if (!IsValidPort(HostPort))
+        if (!UseRelay && !IsValidPort(HostPort))
         {
             message = "Le port hôte doit être compris entre 1 et 65535.";
+            return false;
+        }
+
+        if (UseRelay && !ValidateRelayInputs(out message))
+        {
             return false;
         }
 
@@ -442,15 +659,44 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(JoinAddress))
+        if (!UseRelay && string.IsNullOrWhiteSpace(JoinAddress))
         {
             message = "L'adresse de l'hôte est requise.";
             return false;
         }
 
-        if (!IsValidPort(JoinPort))
+        if (!UseRelay && !IsValidPort(JoinPort))
         {
             message = "Le port de connexion doit être compris entre 1 et 65535.";
+            return false;
+        }
+
+        if (UseRelay && !ValidateRelayInputs(out message))
+        {
+            return false;
+        }
+
+        message = string.Empty;
+        return true;
+    }
+
+    private bool ValidateRelayInputs(out string message)
+    {
+        if (string.IsNullOrWhiteSpace(RelayAddress))
+        {
+            message = "L'adresse du relais est requise.";
+            return false;
+        }
+
+        if (!IsValidPort(RelayPort))
+        {
+            message = "Le port du relais doit être compris entre 1 et 65535.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(RelaySessionCode))
+        {
+            message = "Le code de session relais est requis.";
             return false;
         }
 

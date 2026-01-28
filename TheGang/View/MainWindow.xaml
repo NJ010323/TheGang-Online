@@ -19,6 +19,10 @@
                    Margin="0,0,0,12" />
 
         <Grid Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="*" />
@@ -90,6 +94,33 @@
                                Foreground="Gray"
                                TextWrapping="Wrap"
                                Text="L'hôte verra les joueurs connectés ici." />
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="Relais (pour jouer entre réseaux différents)" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,12,0,0">
+                <StackPanel Margin="12">
+                    <CheckBox Content="Utiliser un relais" IsChecked="{Binding UseRelay}" />
+                    <UniformGrid Columns="3" Margin="0,8,0,0">
+                        <StackPanel Margin="0,0,12,0">
+                            <TextBlock Text="Adresse du relais" />
+                            <TextBox Margin="0,4,0,0"
+                                     Text="{Binding RelayAddress, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Margin="0,0,12,0">
+                            <TextBlock Text="Port du relais" />
+                            <TextBox Margin="0,4,0,0"
+                                     Text="{Binding RelayPort, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="Code de session" />
+                            <TextBox Margin="0,4,0,0"
+                                     Text="{Binding RelaySessionCode, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                    </UniformGrid>
+                    <TextBlock Margin="0,8,0,0"
+                               Foreground="Gray"
+                               TextWrapping="Wrap"
+                               Text="Le relais permet aux joueurs sur des réseaux différents de se connecter sans ouvrir de ports." />
                 </StackPanel>
             </GroupBox>
         </Grid>
