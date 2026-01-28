@@ -49,9 +49,9 @@ public class PeerToPeerSession : IPeerToPeerSession
         {
             throw new ArgumentException("Le nom de l'hôte est requis.", nameof(hostDisplayName));
         }
-        if (maxPeers < 3)
+        if (maxPeers < 2)
         {
-            throw new ArgumentOutOfRangeException(nameof(maxPeers), "Le nombre maximal de joueurs doit être au moins 3.");
+            throw new ArgumentOutOfRangeException(nameof(maxPeers), "Le nombre maximal de joueurs doit être au moins 2.");
         }
 
         var host = new PeerInfo(Guid.NewGuid(), hostDisplayName.Trim(), true);

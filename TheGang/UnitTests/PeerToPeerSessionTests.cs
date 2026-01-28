@@ -39,6 +39,24 @@ public class PeerToPeerSessionTests
         Assert.Null(extraPeer);
         Assert.Equal("Le nombre maximal de joueurs est atteint.", extraError);
     }
+    
+    [Fact]
+    public void TryJoin_ShouldAllowTwoPlayersWhenMaxPeersIsTwo()
+    {
+        var session = PeerToPeerSession.CreateHost("Host", maxPeers: 2);
+
+        bool joined = session.TryJoin("Guest", out var guest, out var errorMessage);
+
+        Assert.True(joined);
+        Assert.NotNull(guest);
+        Assert.Null(errorMessage);
+
+        bool extraJoin = session.TryJoin("LateGuest", out var extraGuest, out var extraError);
+
+        Assert.False(extraJoin);
+        Assert.Null(extraGuest);
+        Assert.Equal("Le nombre maximal de joueurs est atteint.", extraError);
+    }
 
     [Fact]
     public void TryJoin_ShouldRejectDuplicateDisplayNames()
