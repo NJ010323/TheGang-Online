@@ -13,6 +13,8 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
     private readonly SynchronizationContext? _uiContext;
     private CancellationTokenSource? _listenerCts;
     private TcpListener? _listener;
+    private TcpClient? _clientConnection;
+    private CancellationTokenSource? _clientMonitorCts;
     private PeerToPeerSession? _session;
     private bool _isHosting;
     private bool _isConnected;
@@ -185,8 +187,12 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
     public void Dispose()
     {
         StopHost();
+        CloseClientConnection();
     }
 
+    /// <summary>
+    /// Informe les commandes que l'état a changé.
+    /// </summary>
     private void RaiseCommandStates()
     {
         StartHostCommand.RaiseCanExecuteChanged();
@@ -195,6 +201,9 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         DisconnectCommand.RaiseCanExecuteChanged();
     }
 
+    /// <summary>
+    /// Démarre l'hôte après validation des paramètres.
+    /// </summary>
     private Task StartHostAsync()
     {
         if (!ValidateHostInputs(out var validationMessage))
@@ -205,7 +214,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
 
         _peers.Clear();
         _session = PeerToPeerSession.CreateHost(HostDisplayName.Trim(), MaxPeers);
-        _peers.Add($"{_session.Host.DisplayName} (hôte)");
+        _peers.Add(PeerToPeerSessionProtocol.FormatHostDisplayName(_session.Host.DisplayName));
 
         _listenerCts = new CancellationTokenSource();
         _listener = new TcpListener(IPAddress.Any, HostPort);
@@ -230,6 +239,9 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         StatusMessage = "Hôte arrêté.";
     }
 
+    /// <summary>
+    /// Accepte les connexions entrantes tant que l'écoute est active.
+    /// </summary>
     private async Task AcceptLoopAsync(CancellationToken cancellationToken)
     {
         if (_listener is null || _session is null)
@@ -258,6 +270,9 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         }
     }
 
+    /// <summary>
+    /// Gère un client et surveille sa déconnexion.
+    /// </summary>
     private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
     {
         using (client)
@@ -285,15 +300,45 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
                 return;
             }
 
-            await writer.WriteLineAsync("OK").ConfigureAwait(false);
+            var joinedPeer = newPeer!;
+            await writer.WriteLineAsync(PeerToPeerSessionProtocol.BuildSessionInfoMessage(_session)).ConfigureAwait(false);
             PostToUi(() =>
             {
-                _peers.Add(newPeer!.DisplayName);
-                StatusMessage = $"{newPeer.DisplayName} a rejoint la session.";
+                _peers.Add(joinedPeer.DisplayName);
+                StatusMessage = $"{joinedPeer.DisplayName} a rejoint la session.";
             });
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                    if (line is null)
+                    {
+                        break;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                if (_session?.TryLeave(joinedPeer.Id, out _) == true)
+                {
+                    PostToUi(() =>
+                    {
+                        _peers.Remove(joinedPeer.DisplayName);
+                        StatusMessage = $"{joinedPeer.DisplayName} s'est déconnecté.";
+                    });
+                }
+            }
         }
     }
 
+    /// <summary>
+    /// Se connecte à un hôte et récupère l'état de la session.
+    /// </summary>
     private async Task JoinSessionAsync()
     {
         if (!ValidateJoinInputs(out var validationMessage))
@@ -304,9 +349,11 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
 
         try
         {
-            using var client = new TcpClient();
+            CloseClientConnection();
+
+            var client = new TcpClient();
             await client.ConnectAsync(JoinAddress.Trim(), JoinPort).ConfigureAwait(false);
-            await using var stream = client.GetStream();
+            var stream = client.GetStream();
             await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
             using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
 
@@ -316,17 +363,32 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
             if (response is null)
             {
                 StatusMessage = "Connexion interrompue par l'hôte.";
+                client.Close();
                 return;
             }
 
             if (response.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase))
             {
                 StatusMessage = response.Replace("ERROR:", "Erreur: ", StringComparison.OrdinalIgnoreCase);
+                client.Close();
                 return;
             }
 
-            IsConnected = true;
-            StatusMessage = $"Connecté à {JoinAddress}:{JoinPort} en tant que {JoinDisplayName}.";
+            if (!PeerToPeerSessionProtocol.TryParseSessionInfo(response, out var sessionInfo))
+            {
+                StatusMessage = "Connexion acceptée, mais les détails de la session sont invalides.";
+                client.Close();
+                return;
+            }
+
+            _clientConnection = client;
+            StartClientMonitor(stream);
+            PostToUi(() =>
+            {
+                IsConnected = true;
+                UpdatePeersFromSessionInfo(sessionInfo);
+                StatusMessage = $"Connecté à {sessionInfo.HostName} ({sessionInfo.PeerCount} joueur(s)) : {sessionInfo.PeerList}.";
+            });
         }
         catch (SocketException)
         {
@@ -334,10 +396,18 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         }
     }
 
+    /// <summary>
+    /// Déconnecte le client local.
+    /// </summary>
     private void Disconnect()
     {
-        IsConnected = false;
-        StatusMessage = "Déconnecté.";
+        CloseClientConnection();
+        PostToUi(() =>
+        {
+            IsConnected = false;
+            _peers.Clear();
+            StatusMessage = "Déconnecté.";
+        });
     }
 
     private bool ValidateHostInputs(out string message)
@@ -390,6 +460,9 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
 
     private static bool IsValidPort(int port) => port is > 0 and <= 65535;
 
+    /// <summary>
+    /// Poste une action sur le thread UI si nécessaire.
+    /// </summary>
     private void PostToUi(Action action)
     {
         if (_uiContext is null)
@@ -399,5 +472,76 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         }
 
         _uiContext.Post(_ => action(), null);
+    }
+
+    /// <summary>
+    /// Ferme proprement la connexion client locale.
+    /// </summary>
+    private void CloseClientConnection()
+    {
+        _clientMonitorCts?.Cancel();
+        _clientMonitorCts?.Dispose();
+        _clientMonitorCts = null;
+        _clientConnection?.Close();
+        _clientConnection = null;
+    }
+
+    /// <summary>
+    /// Surveille la connexion client afin de détecter la déconnexion côté hôte.
+    /// </summary>
+    private void StartClientMonitor(NetworkStream stream)
+    {
+        _clientMonitorCts?.Cancel();
+        _clientMonitorCts?.Dispose();
+        _clientMonitorCts = new CancellationTokenSource();
+
+        var token = _clientMonitorCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+                while (!token.IsCancellationRequested)
+                {
+                    var line = await reader.ReadLineAsync(token).ConfigureAwait(false);
+                    if (line is null)
+                    {
+                        break;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                PostToUi(() =>
+                {
+                    IsConnected = false;
+                    _peers.Clear();
+                    StatusMessage = "Déconnecté.";
+                });
+            }
+        }, token);
+    }
+
+    /// <summary>
+    /// Met à jour la liste locale des pairs à partir des données reçues.
+    /// </summary>
+    private void UpdatePeersFromSessionInfo(PeerToPeerSessionProtocol.SessionSnapshot sessionInfo)
+    {
+        _peers.Clear();
+
+        foreach (var name in sessionInfo.PeerNames)
+        {
+            _peers.Add(name.Equals(sessionInfo.HostName, StringComparison.OrdinalIgnoreCase)
+                ? PeerToPeerSessionProtocol.FormatHostDisplayName(name)
+                : name);
+        }
     }
 }
