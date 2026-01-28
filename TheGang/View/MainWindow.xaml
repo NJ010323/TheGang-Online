@@ -5,8 +5,98 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:View"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="Test Peer-to-Peer" Height="520" Width="900">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
+        <TextBlock Text="Fenêtre de test Peer-to-Peer"
+                   FontSize="20"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,12" />
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <GroupBox Header="Hôte" Margin="0,0,8,0">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Nom de l'hôte" />
+                    <TextBox Margin="0,4,0,12"
+                             Text="{Binding HostDisplayName, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Text="Port d'écoute" />
+                    <TextBox Margin="0,4,0,12"
+                             Text="{Binding HostPort, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Text="Nombre max de joueurs" />
+                    <TextBox Margin="0,4,0,16"
+                             Text="{Binding MaxPeers, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Démarrer l'hôte"
+                                Width="140"
+                                Margin="0,0,8,0"
+                                Command="{Binding StartHostCommand}" />
+                        <Button Content="Arrêter"
+                                Width="80"
+                                Command="{Binding StopHostCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="Rejoindre une session" Grid.Column="1" Margin="8,0">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Nom du joueur" />
+                    <TextBox Margin="0,4,0,12"
+                             Text="{Binding JoinDisplayName, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Text="Adresse de l'hôte" />
+                    <TextBox Margin="0,4,0,12"
+                             Text="{Binding JoinAddress, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Text="Port de l'hôte" />
+                    <TextBox Margin="0,4,0,16"
+                             Text="{Binding JoinPort, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Se connecter"
+                                Width="140"
+                                Margin="0,0,8,0"
+                                Command="{Binding JoinCommand}" />
+                        <Button Content="Se déconnecter"
+                                Width="120"
+                                Command="{Binding DisconnectCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="Participants" Grid.Column="2" Margin="8,0,0,0">
+                <StackPanel Margin="12">
+                    <ItemsControl ItemsSource="{Binding Peers}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Margin="0,12,0,0"
+                               Foreground="Gray"
+                               TextWrapping="Wrap"
+                               Text="L'hôte verra les joueurs connectés ici." />
+                </StackPanel>
+            </GroupBox>
+        </Grid>
+
+        <Border Grid.Row="2" Margin="0,16,0,0" Background="#FFF5F5F5" Padding="12">
+            <TextBlock Text="{Binding StatusMessage}"
+                       TextWrapping="Wrap" />
+        </Border>
     </Grid>
 </Window>

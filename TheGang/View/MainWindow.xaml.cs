@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using ViewModel;
 
 namespace View;
 
@@ -19,5 +20,17 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        DataContext = new PeerToPeerTestViewModel();
+        Closed += OnClosed;
+    }
+    
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        if (DataContext is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+
+        Closed -= OnClosed;
     }
 }
