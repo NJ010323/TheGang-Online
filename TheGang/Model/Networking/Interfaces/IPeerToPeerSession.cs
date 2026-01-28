@@ -10,6 +10,8 @@ public interface IPeerToPeerSession
     IPeerInfo Host { get; }
 
     IReadOnlyList<IPeerInfo> Peers { get; }
+    
+    int MaxPeers { get; }
 
     void Open();
 

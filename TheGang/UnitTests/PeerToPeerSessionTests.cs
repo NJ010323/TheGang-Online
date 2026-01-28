@@ -21,9 +21,10 @@ public class PeerToPeerSessionTests
     [Fact]
     public void TryJoin_ShouldAllowUpToMaximumPeers()
     {
-        var session = PeerToPeerSession.CreateHost("Host");
+        const int maxPeers = 4;
+        var session = PeerToPeerSession.CreateHost("Host", maxPeers);
 
-        for (int index = 0; index < PeerToPeerSession.MaxPeers - 1; index++)
+        for (int index = 0; index < maxPeers - 1; index++)
         {
             bool joined = session.TryJoin($"Player{index}", out var peer, out var errorMessage);
 

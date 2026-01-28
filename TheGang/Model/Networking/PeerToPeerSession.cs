@@ -7,17 +7,10 @@ namespace Model.Networking;
 /// </summary>
 public class PeerToPeerSession : IPeerToPeerSession
 {
-    public const int MaxPeers = 6;
+    public const int DefaultMaxPeers = 6;
 
     private readonly List<IPeerInfo> _peers = new();
-
-    private PeerToPeerSession(IPeerInfo host)
-    {
-        Host = host;
-        _peers.Add(host);
-        IsOpen = true;
-    }
-
+    
     /// <summary>
     /// Pair qui héberge la session.
     /// </summary>
@@ -32,19 +25,37 @@ public class PeerToPeerSession : IPeerToPeerSession
     /// Liste en lecture seule des pairs connectés (hébergeur inclus).
     /// </summary>
     public IReadOnlyList<IPeerInfo> Peers => _peers.AsReadOnly();
+    
+    /// <summary>
+    /// Nombre maximal de pairs autorisés dans la session (hébergeur inclus).
+    /// </summary>
+    public int MaxPeers { get; }
+
+    private PeerToPeerSession(IPeerInfo host, int maxPeers)
+    {
+        Host = host;
+        MaxPeers = maxPeers;
+        _peers.Add(host);
+        IsOpen = true;
+    }
+    
 
     /// <summary>
     /// Crée une nouvelle session en tant qu'hôte.
     /// </summary>
-    public static PeerToPeerSession CreateHost(string hostDisplayName)
+    public static PeerToPeerSession CreateHost(string hostDisplayName, int maxPeers = DefaultMaxPeers)
     {
         if (string.IsNullOrWhiteSpace(hostDisplayName))
         {
             throw new ArgumentException("Le nom de l'hôte est requis.", nameof(hostDisplayName));
         }
+        if (maxPeers < 3)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxPeers), "Le nombre maximal de joueurs doit être au moins 3.");
+        }
 
         var host = new PeerInfo(Guid.NewGuid(), hostDisplayName.Trim(), true);
-        return new PeerToPeerSession(host);
+        return new PeerToPeerSession(host, maxPeers);
     }
 
     /// <summary>
