@@ -621,6 +621,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
                 var sender = JoinDisplayName.Trim();
                 await _clientWriter.WriteLineAsync(PeerToPeerSessionProtocol.BuildChatMessage(sender, message))
                     .ConfigureAwait(false);
+                AddChatMessage(sender, message);
             }
             catch (IOException)
             {
@@ -634,7 +635,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
     private async Task HandleChatMessageAsync(string sender, string message)
     {
         AddChatMessage(sender, message);
-        await BroadcastChatMessageAsync(sender, message).ConfigureAwait(false);
+        await BroadcastChatMessageAsync(sender, message, sender).ConfigureAwait(false);
     }
 
     private void AddChatMessage(string sender, string message)
@@ -651,7 +652,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         PostToUi(() => _chatMessages.Add($"[{time}] {safeSender} : {safeMessage}"));
     }
 
-    private async Task BroadcastChatMessageAsync(string sender, string message)
+    private async Task BroadcastChatMessageAsync(string sender, string message, string? excludedSender = null)
     {
         List<ClientConnection> connections;
         lock (_clientSync)
@@ -669,6 +670,12 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
 
         foreach (var connection in connections)
         {
+            if (!string.IsNullOrWhiteSpace(excludedSender)
+                && connection.DisplayName.Equals(excludedSender, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             try
             {
                 await connection.Writer.WriteLineAsync(payload).ConfigureAwait(false);
