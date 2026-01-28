@@ -517,7 +517,6 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
             {
                 if (token.IsCancellationRequested)
                 {
-                    return;
                 }
 
                 PostToUi(() =>
