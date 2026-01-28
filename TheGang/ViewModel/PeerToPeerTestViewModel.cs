@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -9,11 +11,16 @@ namespace ViewModel;
 public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
 {
     private readonly ObservableCollection<string> _peers = new();
+    private readonly ObservableCollection<string> _chatMessages = new();
     private readonly ReadOnlyObservableCollection<string> _readonlyPeers;
+    private readonly ReadOnlyObservableCollection<string> _readonlyChatMessages;
     private readonly SynchronizationContext? _uiContext;
+    private readonly object _clientSync = new();
+    private readonly List<ClientConnection> _clientConnections = new();
     private CancellationTokenSource? _listenerCts;
     private TcpListener? _listener;
     private TcpClient? _clientConnection;
+    private StreamWriter? _clientWriter;
     private CancellationTokenSource? _clientMonitorCts;
     private PeerToPeerSession? _session;
     private bool _isHosting;
@@ -24,20 +31,25 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
     private int _hostPort = 7777;
     private int _joinPort = 7777;
     private int _maxPeers = 2;
+    private string _chatInput = string.Empty;
     private string _statusMessage = "Prêt à tester.";
 
     public PeerToPeerTestViewModel()
     {
         _readonlyPeers = new ReadOnlyObservableCollection<string>(_peers);
+        _readonlyChatMessages = new ReadOnlyObservableCollection<string>(_chatMessages);
         _uiContext = SynchronizationContext.Current;
 
         StartHostCommand = new AsyncRelayCommand(StartHostAsync, () => !IsHosting);
         StopHostCommand = new RelayCommand(StopHost, () => IsHosting);
         JoinCommand = new AsyncRelayCommand(JoinSessionAsync, () => !IsHosting && !IsConnected);
         DisconnectCommand = new RelayCommand(Disconnect, () => IsConnected);
+        SendChatCommand = new AsyncRelayCommand(SendChatAsync, CanSendChat);
     }
 
     public ReadOnlyObservableCollection<string> Peers => _readonlyPeers;
+
+    public ReadOnlyObservableCollection<string> ChatMessages => _readonlyChatMessages;
 
     public string HostDisplayName
     {
@@ -129,6 +141,22 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         }
     }
 
+    public string ChatInput
+    {
+        get => _chatInput;
+        set
+        {
+            if (_chatInput == value)
+            {
+                return;
+            }
+
+            _chatInput = value;
+            OnPropertyChanged();
+            SendChatCommand.RaiseCanExecuteChanged();
+        }
+    }
+
     public bool IsHosting
     {
         get => _isHosting;
@@ -184,6 +212,8 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
 
     public RelayCommand DisconnectCommand { get; }
 
+    public AsyncRelayCommand SendChatCommand { get; }
+
     public void Dispose()
     {
         StopHost();
@@ -199,6 +229,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         StopHostCommand.RaiseCanExecuteChanged();
         JoinCommand.RaiseCanExecuteChanged();
         DisconnectCommand.RaiseCanExecuteChanged();
+        SendChatCommand.RaiseCanExecuteChanged();
     }
 
     /// <summary>
@@ -213,6 +244,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         }
 
         _peers.Clear();
+        _chatMessages.Clear();
         _session = PeerToPeerSession.CreateHost(HostDisplayName.Trim(), MaxPeers);
         _peers.Add(PeerToPeerSessionProtocol.FormatHostDisplayName(_session.Host.DisplayName));
 
@@ -234,8 +266,10 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         _listener = null;
         _listenerCts = null;
         _session = null;
+        CloseHostConnections();
         IsHosting = false;
         _peers.Clear();
+        _chatMessages.Clear();
         StatusMessage = "Hôte arrêté.";
     }
 
@@ -301,6 +335,8 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
             }
 
             var joinedPeer = newPeer!;
+            var connection = new ClientConnection(joinedPeer.DisplayName, client, writer);
+            AddClientConnection(connection);
             await writer.WriteLineAsync(PeerToPeerSessionProtocol.BuildSessionInfoMessage(_session)).ConfigureAwait(false);
             PostToUi(() =>
             {
@@ -317,6 +353,11 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
                     {
                         break;
                     }
+
+                    if (PeerToPeerSessionProtocol.TryParseChatMessage(line, out _, out var message))
+                    {
+                        await HandleChatMessageAsync(joinedPeer.DisplayName, message).ConfigureAwait(false);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -324,6 +365,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
             }
             finally
             {
+                RemoveClientConnection(connection);
                 if (_session?.TryLeave(joinedPeer.Id, out _) == true)
                 {
                     PostToUi(() =>
@@ -382,11 +424,13 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
             }
 
             _clientConnection = client;
+            _clientWriter = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
             StartClientMonitor(stream);
             PostToUi(() =>
             {
                 IsConnected = true;
                 UpdatePeersFromSessionInfo(sessionInfo);
+                _chatMessages.Clear();
                 StatusMessage = $"Connecté à {sessionInfo.HostName} ({sessionInfo.PeerCount} joueur(s)) : {sessionInfo.PeerList}.";
             });
         }
@@ -406,6 +450,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         {
             IsConnected = false;
             _peers.Clear();
+            _chatMessages.Clear();
             StatusMessage = "Déconnecté.";
         });
     }
@@ -482,6 +527,8 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
         _clientMonitorCts?.Cancel();
         _clientMonitorCts?.Dispose();
         _clientMonitorCts = null;
+        _clientWriter?.Dispose();
+        _clientWriter = null;
         _clientConnection?.Close();
         _clientConnection = null;
     }
@@ -508,6 +555,11 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
                     {
                         break;
                     }
+
+                    if (PeerToPeerSessionProtocol.TryParseChatMessage(line, out var sender, out var message))
+                    {
+                        AddChatMessage(sender, message);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -523,6 +575,7 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
                 {
                     IsConnected = false;
                     _peers.Clear();
+                    _chatMessages.Clear();
                     StatusMessage = "Déconnecté.";
                 });
             }
@@ -543,4 +596,133 @@ public sealed class PeerToPeerTestViewModel : BaseVm, IDisposable
                 : name);
         }
     }
+
+    private bool CanSendChat()
+        => (IsHosting || IsConnected) && !string.IsNullOrWhiteSpace(ChatInput);
+
+    private async Task SendChatAsync()
+    {
+        var message = ChatInput.Trim();
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        if (IsHosting)
+        {
+            var sender = HostDisplayName.Trim();
+            AddChatMessage(sender, message);
+            await BroadcastChatMessageAsync(sender, message).ConfigureAwait(false);
+        }
+        else if (IsConnected && _clientWriter is not null)
+        {
+            try
+            {
+                var sender = JoinDisplayName.Trim();
+                await _clientWriter.WriteLineAsync(PeerToPeerSessionProtocol.BuildChatMessage(sender, message))
+                    .ConfigureAwait(false);
+                await _clientWriter.FlushAsync().ConfigureAwait(false);
+            }
+            catch (IOException)
+            {
+                StatusMessage = "Message non envoyé : connexion perdue.";
+            }
+        }
+
+        PostToUi(() => ChatInput = string.Empty);
+    }
+
+    private async Task HandleChatMessageAsync(string sender, string message)
+    {
+        AddChatMessage(sender, message);
+        await BroadcastChatMessageAsync(sender, message).ConfigureAwait(false);
+    }
+
+    private void AddChatMessage(string sender, string message)
+    {
+        var time = DateTime.Now.ToString("HH:mm");
+        var safeMessage = message.ReplaceLineEndings(" ").Trim();
+        var safeSender = sender.Trim();
+
+        if (string.IsNullOrWhiteSpace(safeSender) || string.IsNullOrWhiteSpace(safeMessage))
+        {
+            return;
+        }
+
+        PostToUi(() => _chatMessages.Add($"[{time}] {safeSender} : {safeMessage}"));
+    }
+
+    private async Task BroadcastChatMessageAsync(string sender, string message)
+    {
+        List<ClientConnection> connections;
+        lock (_clientSync)
+        {
+            connections = _clientConnections.ToList();
+        }
+
+        if (connections.Count == 0)
+        {
+            return;
+        }
+
+        var payload = PeerToPeerSessionProtocol.BuildChatMessage(sender, message);
+        var toRemove = new List<ClientConnection>();
+
+        foreach (var connection in connections)
+        {
+            try
+            {
+                await connection.Writer.WriteLineAsync(payload).ConfigureAwait(false);
+                await connection.Writer.FlushAsync().ConfigureAwait(false);
+            }
+            catch (IOException)
+            {
+                toRemove.Add(connection);
+            }
+        }
+
+        if (toRemove.Count == 0)
+        {
+            return;
+        }
+
+        lock (_clientSync)
+        {
+            foreach (var connection in toRemove)
+            {
+                _clientConnections.Remove(connection);
+            }
+        }
+    }
+
+    private void AddClientConnection(ClientConnection connection)
+    {
+        lock (_clientSync)
+        {
+            _clientConnections.Add(connection);
+        }
+    }
+
+    private void RemoveClientConnection(ClientConnection connection)
+    {
+        lock (_clientSync)
+        {
+            _clientConnections.Remove(connection);
+        }
+    }
+
+    private void CloseHostConnections()
+    {
+        lock (_clientSync)
+        {
+            foreach (var connection in _clientConnections)
+            {
+                connection.Client.Close();
+            }
+
+            _clientConnections.Clear();
+        }
+    }
+
+    private sealed record ClientConnection(string DisplayName, TcpClient Client, StreamWriter Writer);
 }
