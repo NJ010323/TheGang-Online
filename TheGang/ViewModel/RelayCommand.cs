@@ -6,6 +6,7 @@ public sealed class RelayCommand : ICommand
 {
     private readonly Action _execute;
     private readonly Func<bool>? _canExecute;
+    private readonly SynchronizationContext? _synchronizationContext = SynchronizationContext.Current;
 
     public RelayCommand(Action execute, Func<bool>? canExecute = null)
     {
@@ -19,5 +20,14 @@ public sealed class RelayCommand : ICommand
 
     public void Execute(object? parameter) => _execute();
 
-    public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    public void RaiseCanExecuteChanged()
+    {
+        if (_synchronizationContext is null)
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        _synchronizationContext.Post(_ => CanExecuteChanged?.Invoke(this, EventArgs.Empty), null);
+    }
 }

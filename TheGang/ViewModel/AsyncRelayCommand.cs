@@ -2,11 +2,12 @@ using System.Windows.Input;
 
 namespace ViewModel;
 
-public class AsyncRelayCommand : ICommand
+public sealed class AsyncRelayCommand : ICommand
 {
     private readonly Func<Task> _execute;
     private readonly Func<bool>? _canExecute;
     private bool _isExecuting;
+    private readonly SynchronizationContext? _synchronizationContext = SynchronizationContext.Current;
 
     public AsyncRelayCommand(Func<Task> execute, Func<bool>? canExecute = null)
     {
@@ -39,5 +40,14 @@ public class AsyncRelayCommand : ICommand
         }
     }
 
-    public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    public void RaiseCanExecuteChanged()
+    {
+        if (_synchronizationContext is null)
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        _synchronizationContext.Post(_ => CanExecuteChanged?.Invoke(this, EventArgs.Empty), null);
+    }
 }
