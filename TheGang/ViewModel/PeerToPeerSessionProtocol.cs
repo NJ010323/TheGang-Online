@@ -28,6 +28,36 @@ internal static class PeerToPeerSessionProtocol
     }
 
     /// <summary>
+    /// Construit un message de chat.
+    /// </summary>
+    internal static string BuildChatMessage(string sender, string message)
+        => $"CHAT|{sender}|{SanitizeChatText(message)}";
+
+    /// <summary>
+    /// Analyse un message de chat.
+    /// </summary>
+    internal static bool TryParseChatMessage(string response, out string sender, out string message)
+    {
+        sender = string.Empty;
+        message = string.Empty;
+
+        if (!response.StartsWith("CHAT|", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var parts = response.Split('|', 3);
+        if (parts.Length < 3)
+        {
+            return false;
+        }
+
+        sender = parts[1];
+        message = parts[2];
+        return true;
+    }
+
+    /// <summary>
     /// Analyse un message d'information de session.
     /// </summary>
     internal static bool TryParseSessionInfo(string response, out SessionSnapshot sessionInfo)
@@ -54,4 +84,7 @@ internal static class PeerToPeerSessionProtocol
         sessionInfo = new SessionSnapshot(parts[1], count, string.Join(", ", names), names);
         return true;
     }
+
+    private static string SanitizeChatText(string message)
+        => message.ReplaceLineEndings(" ").Trim();
 }
