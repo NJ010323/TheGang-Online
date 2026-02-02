@@ -1,4 +1,6 @@
 using Model.Game.Card;
+using Model.Game.Cards.Interfaces;
+
 namespace Model.Game.Hand;
 
 /// <summary>

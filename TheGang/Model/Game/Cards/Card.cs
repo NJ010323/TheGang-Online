@@ -1,6 +1,8 @@
+using Model.Game.Card;
 using Model.Game.Card.CardEnum;
+using Model.Game.Cards.Interfaces;
 
-namespace Model.Game.Card;
+namespace Model.Game.Cards;
 
 public class Card : ICard
 {

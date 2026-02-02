@@ -1,5 +1,6 @@
 using Model.Game.Card;
 using Model.Game.Card.CardEnum;
+using Model.Game.Cards.Interfaces;
 
 namespace Model.Game.Deck;
 
@@ -32,7 +33,7 @@ public class Deck
             for (int rank = 1; rank <= 13; rank++)
             {
 
-                _cards.Add(new Card(suit, rank));
+                _cards.Add(new Cards.Card(suit, rank));
             }
         }
     }

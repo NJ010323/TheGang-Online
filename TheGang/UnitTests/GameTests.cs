@@ -1,6 +1,7 @@
 using Model.Game;
 using Model.Game.Card;
 using Model.Game.Card.CardEnum;
+using Model.Game.Cards;
 
 namespace UnitTests;
 

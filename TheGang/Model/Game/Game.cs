@@ -1,10 +1,10 @@
 using Model.Game.Card;
-using Model.Game.Deck;
+using Model.Game.Cards.Interfaces;
 using Model.Game.Factory.TokenFactory;
 using Model.Game.Hand;
 using Model.Game.Tokens;
 using Model.Game.Tokens.TokenEnum;
-using Model.Player;
+using Model.Players;
 
 namespace Model.Game;
 
@@ -90,7 +90,7 @@ public class Game
     public IReadOnlyList<Player> GetRanking()
     {
         EnsurePhase(GamePhase.Showdown);
-        return _players
+        return (IReadOnlyList<Player>)_players
             .OrderByDescending(player => PokerHandEvaluator.Evaluate(player.Hand, CommunityCards))
             .ToList();
     }

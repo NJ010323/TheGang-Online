@@ -1,16 +1,16 @@
 using Model.Game.Card.CardEnum;
 
-namespace Model.Game.Card;
+namespace Model.Game.Cards.Interfaces;
 
 public interface ICard
 {
     /// <summary>
-    /// Card suit (color)
+    /// Cards suit (color)
     /// </summary>
     public CardColors Suit { get; set; }
 
     /// <summary>
-    /// Card rank (value)
+    /// Cards rank (value)
     /// </summary>
     public int Rank { get; set; }
 

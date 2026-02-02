@@ -1,8 +1,9 @@
 using Model.Game.Card;
 using Model.Game.Card.CardEnum;
+using Model.Game.Cards;
 using Model.Game.Tokens;
 using Model.Game.Tokens.TokenEnum;
-using Model.Player;
+using Model.Players;
 
 namespace UnitTests;
 

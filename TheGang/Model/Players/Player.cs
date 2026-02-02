@@ -1,7 +1,7 @@
-using Model.Game.Card;
+using Model.Game.Cards.Interfaces;
 using Model.Game.Tokens;
 
-namespace Model.Player;
+namespace Model.Players;
 
 /// <summary>
 /// Représente un joueur dans la partie.

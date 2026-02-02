@@ -1,9 +1,7 @@
-
-
-using Model.Game.Card;
 using Model.Game.Card.CardEnum;
+using Model.Game.Cards;
 
-namespace TheGang.Tests;
+namespace UnitTests;
 
 /// <summary>
 /// Tests unitaires pour la classe Card

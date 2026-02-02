@@ -1,4 +1,5 @@
-using Model.Player;
+using Model.Game.Cards.Interfaces;
+using Model.Players;
 
 namespace ViewModel;
 
@@ -16,7 +17,7 @@ public class PlayerViewModel : BaseVm
 
     public string Name => _player.Name;
 
-    public IReadOnlyList<Model.Game.Card.ICard> Hand => _player.Hand;
+    public IReadOnlyList<ICard> Hand => _player.Hand;
 
     public Model.Game.Tokens.Token? SignalToken => _player.SignalToken;
 

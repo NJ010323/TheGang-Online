@@ -1,4 +1,5 @@
 using Model.Game;
+using Model.Game.Cards.Interfaces;
 
 namespace ViewModel;
 
@@ -17,7 +18,7 @@ public class GameViewModel : BaseVm
 
     public IReadOnlyList<PlayerViewModel> Players => _players;
 
-    public IReadOnlyList<Model.Game.Card.ICard> CommunityCards => _game.CommunityCards;
+    public IReadOnlyList<ICard> CommunityCards => _game.CommunityCards;
 
     public GamePhase Phase => _game.Phase;
 
