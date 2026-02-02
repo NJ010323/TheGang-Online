@@ -144,7 +144,7 @@ public class DeckTests
 
         // Act & Assert
         var exception = Assert.Throws<InvalidOperationException>(() => deck.DealCard());
-        Assert.Contains("empty", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("vide", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

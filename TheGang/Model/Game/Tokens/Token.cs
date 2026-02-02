@@ -9,18 +9,18 @@ public class Token : IToken
     public int Value { get; set; }
 
     /// <summary>
-    /// Initialize Token with a color adn a value
+    /// Initialise un jeton avec une couleur et une valeur.
     /// </summary>
-    /// <param name="value">Value of the token</param>
-    /// <param name="color">Color of the token</param>
+    /// <param name="value">Valeur du jeton</param>
+    /// <param name="color">Couleur du jeton</param>
     public Token(int value, TokenColors color)
     {
         Value = value;
         Color = color;
     }
 
-    public string ToString()
+    public override string ToString()
     {
-        throw new NotImplementedException();
+        return $"Jeton {Value} ({Color})";
     }
 }

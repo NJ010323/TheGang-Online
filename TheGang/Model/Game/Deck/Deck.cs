@@ -9,7 +9,7 @@ public class Deck
     private static readonly Random _random = new();
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Deck"/> class with a standard 52-card deck.
+    /// Initialise un nouveau deck standard de 52 cartes.
     /// </summary>
     public Deck()
     {
@@ -18,12 +18,12 @@ public class Deck
     }
 
     /// <summary>
-    /// Gets the number of cards remaining in the deck.
+    /// Retourne le nombre de cartes restantes dans le deck.
     /// </summary>
     public int CardsRemaining => _cards.Count;
 
     /// <summary>
-    /// Initializes the deck with 52 cards (13 ranks × 4 suits).
+    /// Initialise le deck avec 52 cartes (13 valeurs × 4 couleurs).
     /// </summary>
     private void InitializeDeck()
     {
@@ -32,13 +32,13 @@ public class Deck
             for (int rank = 1; rank <= 13; rank++)
             {
 
-                _cards.Add(new Card.Card(suit, rank));
+                _cards.Add(new Card(suit, rank));
             }
         }
     }
 
     /// <summary>
-    /// Shuffles the deck using the Fisher-Yates algorithm.
+    /// Mélange le deck avec l'algorithme de Fisher-Yates.
     /// </summary>
     public void Shuffle()
     {
@@ -52,15 +52,15 @@ public class Deck
     }
 
     /// <summary>
-    /// Deals a single card from the top of the deck.
+    /// Distribue une carte depuis le haut du deck.
     /// </summary>
-    /// <returns>The top card from the deck.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the deck is empty.</exception>
+    /// <returns>La carte distribuée.</returns>
+    /// <exception cref="InvalidOperationException">Le deck est vide.</exception>
     public ICard DealCard()
     {
         if (_cards.Count == 0)
         {
-            throw new InvalidOperationException("Cannot deal a card from an empty deck.");
+            throw new InvalidOperationException("Impossible de distribuer une carte depuis un deck vide.");
         }
 
         var card = _cards[0];
@@ -69,7 +69,7 @@ public class Deck
     }
 
     /// <summary>
-    /// Resets the deck by clearing and reinitializing it.
+    /// Réinitialise le deck en le remplissant de nouveau.
     /// </summary>
     public void Reset()
     {
@@ -78,9 +78,9 @@ public class Deck
     }
 
     /// <summary>
-    /// Returns a string that represents the current deck.
+    /// Retourne une chaîne représentant le deck courant.
     /// </summary>
-    /// <returns>A string that lists all cards in the deck.</returns>
+    /// <returns>Une chaîne listant toutes les cartes.</returns>
     public override string ToString()
     {
         return string.Join("\n", _cards.Select(card => card.ToString()));

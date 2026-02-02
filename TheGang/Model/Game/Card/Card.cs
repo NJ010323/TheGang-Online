@@ -5,10 +5,10 @@ namespace Model.Game.Card;
 public class Card : ICard
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="Card"/> class.
+    /// Initialise une nouvelle carte.
     /// </summary>
-    /// <param name="suit">The suit of the card.</param>
-    /// <param name="rank">The rank of the card (1-13, where 1 is Ace, 11 is Jack, 12 is Queen, 13 is King).</param>
+    /// <param name="suit">Couleur de la carte.</param>
+    /// <param name="rank">Valeur de la carte (1-13, où 1 est As, 11 Valet, 12 Dame, 13 Roi).</param>
     public Card(CardColors suit, int rank)
     {
         Suit = suit;
