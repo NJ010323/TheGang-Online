@@ -16,6 +16,7 @@ public class GameTests
         var game = new Game();
         game.AddPlayer("Alice");
         game.AddPlayer("Bob");
+        game.AddPlayer("Chloe");
 
         // Act
         game.StartGame();
@@ -33,6 +34,7 @@ public class GameTests
         var game = new Game();
         game.AddPlayer("Alice");
         game.AddPlayer("Bob");
+        game.AddPlayer("Chloe");
         game.StartGame();
 
         // Act
@@ -52,6 +54,7 @@ public class GameTests
         var game = new Game();
         game.AddPlayer("Alice");
         game.AddPlayer("Bob");
+        game.AddPlayer("Chloe");
         game.StartGame();
         game.RevealFlop();
         game.RevealTurn();

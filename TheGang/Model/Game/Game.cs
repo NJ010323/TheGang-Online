@@ -47,9 +47,9 @@ public class Game
 
     public void StartGame()
     {
-        if (_players.Count < 2)
+        if (_players.Count < 3)
         {
-            throw new InvalidOperationException("Il faut au moins deux joueurs pour démarrer.");
+            throw new InvalidOperationException("Il faut au moins trois joueurs pour démarrer.");
         }
 
         ResetForNewRound(1);
