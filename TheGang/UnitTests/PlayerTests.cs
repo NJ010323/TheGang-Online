@@ -13,7 +13,7 @@ namespace UnitTests;
 public class PlayerTests
 {
     [Fact]
-    public void ReceiveCard_ShouldAddCardToHand()
+    public void RecevoirCarte_DevraitAjouterLaCarteALaMain()
     {
         // Arrange
         var player = new Player("Alice");
@@ -28,7 +28,7 @@ public class PlayerTests
     }
 
     [Fact]
-    public void AssignSignalToken_ShouldStoreToken()
+    public void AssignerJetonSignal_DevraitStockerLeJeton()
     {
         // Arrange
         var player = new Player("Alice");
@@ -43,7 +43,7 @@ public class PlayerTests
     }
 
     [Fact]
-    public void ClearSignalToken_ShouldRemoveToken()
+    public void EffacerJetonSignal_DevraitRetirerLeJeton()
     {
         // Arrange
         var player = new Player("Alice");

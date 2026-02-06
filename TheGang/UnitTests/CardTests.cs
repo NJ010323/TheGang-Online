@@ -46,7 +46,7 @@ public class CardTests
     /// initialise correctement les propriétés de la carte.
     /// </summary>
     [Fact]
-    public void Card_WhenCreated_ShouldHaveCorrectSuitAndRank()
+    public void Carte_QuandCreee_DevraitAvoirBonneCouleurEtValeur()
     {
         // Arrange - Préparation des données de test
         var expectedSuit = CardColors.Coeur;
@@ -66,7 +66,7 @@ public class CardTests
     /// </summary>
     [Theory]
     [MemberData(nameof(GetAllPossibleCardsWithExpectedStrings))]
-    public void Card_ToString_ShouldReturnCorrectStringForAllCards(CardColors suit, int rank, string expectedString)
+    public void Carte_ToString_DevraitRetournerBonneChainePourToutesLesCartes(CardColors suit, int rank, string expectedString)
     {
         // Arrange
         var card = new Card(suit, rank);
@@ -86,7 +86,7 @@ public class CardTests
     [InlineData(14)]  // Au-dessus de la plage valide
     [InlineData(100)] // Bien au-dessus de la plage valide
     [InlineData(-1)]  // Valeur négative
-    public void Card_WhenCreatedWithInvalidRank_ShouldNotThrow(int invalidRank)
+    public void Carte_QuandCreeeAvecValeurInvalide_NeDevraitPasLancerException(int invalidRank)
     {
         // Arrange & Act
         var exception = Record.Exception(() => new Card(CardColors.Carreau, invalidRank));
@@ -99,7 +99,7 @@ public class CardTests
     /// Vérifie que la propriété Suit peut être modifiée après la création de la carte.
     /// </summary>
     [Fact]
-    public void Suit_WhenModified_ShouldUpdateCardSuit()
+    public void Couleur_QuandModifiee_DevraitMettreAJourLaCouleurDeLaCarte()
     {
         // Arrange
         var card = new Card(CardColors.Pique, 5);
@@ -116,7 +116,7 @@ public class CardTests
     /// Vérifie que la propriété Rank peut être modifiée après la création de la carte.
     /// </summary>
     [Fact]
-    public void Rank_WhenModified_ShouldUpdateCardRank()
+    public void Valeur_QuandModifiee_DevraitMettreAJourLaValeurDeLaCarte()
     {
         // Arrange
         var card = new Card(CardColors.Pique, 5);
@@ -134,7 +134,7 @@ public class CardTests
     /// ne sont pas considérées comme égales par défaut.
     /// </summary>
     [Fact]
-    public void Equals_WhenComparingTwoCardsWithSameValues_ShouldReturnFalse()
+    public void Equals_QuandCompareDeuxCartesAvecValeursIdentiques_DevraitRetournerFaux()
     {
         // Arrange
         var card1 = new Card(CardColors.Carreau, 7);
@@ -150,7 +150,7 @@ public class CardTests
     /// pour des instances différentes.
     /// </summary>
     [Fact]
-    public void GetHashCode_ForDifferentInstances_ShouldReturnDifferentValues()
+    public void GetHashCode_PourInstancesDifferentes_DevraitRetournerValeursDifferentes()
     {
         // Arrange
         var card1 = new Card(CardColors.Coeur, 1);

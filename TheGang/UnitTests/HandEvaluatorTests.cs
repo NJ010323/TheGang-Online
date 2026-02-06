@@ -11,7 +11,7 @@ namespace UnitTests;
 public class HandEvaluatorTests
 {
     [Fact]
-    public void Evaluate_ShouldDetectStraightFlush()
+    public void Evaluer_DevraitDetecterQuinteFlush()
     {
         // Arrange
         var hand = new[]
@@ -37,7 +37,7 @@ public class HandEvaluatorTests
     }
 
     [Fact]
-    public void Evaluate_ShouldDetectFullHouse()
+    public void Evaluer_DevraitDetecterFull()
     {
         // Arrange
         var hand = new[]
@@ -63,7 +63,7 @@ public class HandEvaluatorTests
     }
 
     [Fact]
-    public void Evaluate_ShouldDetectTwoPair()
+    public void Evaluer_DevraitDetecterDoublePaire()
     {
         // Arrange
         var hand = new[]

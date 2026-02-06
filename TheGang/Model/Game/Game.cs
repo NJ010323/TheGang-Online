@@ -16,12 +16,6 @@ public class Game
     private readonly List<Player> _players = new();
     private readonly Deck.Deck _deck = new();
 
-    public Game()
-    {
-        Phase = GamePhase.WaitingForPlayers;
-        CommunityCards = new List<ICard>();
-    }
-
     public IReadOnlyList<Player> Players => _players;
 
     public List<ICard> CommunityCards { get; }
@@ -30,6 +24,12 @@ public class Game
 
     public int CurrentRound { get; private set; }
 
+    public Game()
+    {
+        Phase = GamePhase.WaitingForPlayers;
+        CommunityCards = new List<ICard>();
+    }
+    
     public void AddPlayer(string name)
     {
         if (Phase != GamePhase.WaitingForPlayers)

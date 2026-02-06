@@ -11,7 +11,7 @@ namespace UnitTests;
 public class GameTests
 {
     [Fact]
-    public void StartGame_ShouldDealCardsAndSetPhase()
+    public void DemarrerPartie_DevraitDistribuerLesCartesEtDefinirLaPhase()
     {
         // Arrange
         var game = new Game();
@@ -29,7 +29,7 @@ public class GameTests
     }
 
     [Fact]
-    public void RevealSequence_ShouldAddCommunityCards()
+    public void SequenceDeDecouverte_DevraitAjouterLesCartesCommunautaires()
     {
         // Arrange
         var game = new Game();
@@ -49,7 +49,7 @@ public class GameTests
     }
 
     [Fact]
-    public void GetRanking_ShouldReturnPlayersOrderedByScore()
+    public void ObtenirClassement_DevraitRetournerLesJoueursTriesParScore()
     {
         // Arrange
         var game = new Game();

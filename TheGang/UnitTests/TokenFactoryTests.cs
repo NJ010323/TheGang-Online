@@ -9,7 +9,7 @@ namespace UnitTests;
 public class TokenFactoryTests
 {
     [Fact]
-    public void CreateTokens_ShouldReturnTokensWithCorrectValues()
+    public void CreerJetons_DevraitRetournerJetonsAvecValeursCorrectes()
     {
         // Arrange
         var factory = new RoundTokenFactory(TokenColors.Yellow);

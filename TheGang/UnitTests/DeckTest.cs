@@ -22,7 +22,7 @@ public class DeckTests
     /// Vérifie qu'un nouveau deck contient exactement 52 cartes
     /// </summary>
     [Fact]
-    public void NewDeck_ShouldContain52Cards()
+    public void NouveauDeck_DevraitContenir52Cartes()
     {
         // Arrange
         var deck = new Deck();
@@ -38,7 +38,7 @@ public class DeckTests
     /// Vérifie que le deck contient toutes les cartes attendues
     /// </summary>
     [Fact]
-    public void NewDeck_ShouldContainAllCards()
+    public void NouveauDeck_DevraitContenirToutesLesCartes()
     {
         // Arrange
         var deck = new Deck();
@@ -59,7 +59,7 @@ public class DeckTests
     /// </summary>
     [Theory]
     [MemberData(nameof(GetDealCardTestData))]
-    public void DealCard_ShouldReduceRemainingCards(int cardsToDeal)
+    public void DistribuerCarte_DevraitReduireLesCartesRestantes(int cardsToDeal)
     {
         // Arrange
         var deck = new Deck();
@@ -79,7 +79,7 @@ public class DeckTests
     /// Vérifie que le mélange change l'ordre des cartes
     /// </summary>
     [Fact]
-    public void Shuffle_ShouldChangeCardOrder()
+    public void Melanger_DevraitChangerLordreDesCartes()
     {
         // Arrange
         var deck1 = new Deck();
@@ -98,7 +98,7 @@ public class DeckTests
     /// Vérifie que la réinitialisation du deck restaure toutes les cartes
     /// </summary>
     [Fact]
-    public void Reset_ShouldRestoreAllCards()
+    public void Reinitialiser_DevraitRestaurerToutesLesCartes()
     {
         // Arrange
         var deck = new Deck();
@@ -133,7 +133,7 @@ public class DeckTests
     /// Vérifie que la distribution d'une carte depuis un deck vide lève une exception
     /// </summary>
     [Fact]
-    public void DealCard_FromEmptyDeck_ShouldThrowException()
+    public void DistribuerCarte_DeckVide_DevraitLancerException()
     {
         // Arrange
         var deck = new Deck();
@@ -151,7 +151,7 @@ public class DeckTests
     /// Vérifie que le mélange ne perd ni ne duplique de cartes
     /// </summary>
     [Fact]
-    public void Shuffle_ShouldNotLoseOrDuplicateCards()
+    public void Melanger_NeDevraitPasPerdreNiDupliquerDeCartes()
     {
         // Arrange
         var deck = new Deck();
