@@ -22,6 +22,7 @@ public class LobbyTests
         Assert.Throws<ArgumentOutOfRangeException>(() => manager.CreateLobby("Host", 2));
         Assert.Throws<ArgumentOutOfRangeException>(() => manager.CreateLobby("Host", 7));
         Assert.Throws<ArgumentException>(() => manager.CreateLobby(" ", 3));
+        Assert.Throws<ArgumentException>(() => manager.CreateLobby(new string('A', 25), 3));
     }
 
     [Fact]
@@ -39,6 +40,7 @@ public class LobbyTests
         manager.LeaveLobby(lobby.Code, firstGuest.Id);
         Assert.DoesNotContain(lobby.Players, player => player.Id == firstGuest.Id);
         Assert.Throws<InvalidOperationException>(() => manager.JoinLobby(lobby.Code, "chloe"));
+        Assert.Throws<ArgumentException>(() => manager.JoinLobby(lobby.Code, "Bad\nName"));
         Assert.Equal("Dana", manager.JoinLobby(lobby.Code, "Dana").Name);
     }
 

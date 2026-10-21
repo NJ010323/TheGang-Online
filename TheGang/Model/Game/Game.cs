@@ -70,7 +70,7 @@ public class Game
     /// <summary>Résultat du braquage précédent ; null avant la première résolution.</summary>
     public bool? LastHeistSucceeded { get; private set; }
 
-    /// <summary>Inscrit un joueur avant le départ, dans la limite de six noms uniques.</summary>
+    /// <summary>Inscrit un joueur avant le départ, avec un pseudo affichable et unique.</summary>
     public void AddPlayer(string name)
     {
         EnsurePhase(GamePhase.WaitingForPlayers);
@@ -80,6 +80,8 @@ public class Game
             throw new ArgumentException("Le nom du joueur est obligatoire.", nameof(name));
 
         name = name.Trim();
+        if (name.Length > 24 || name.Any(char.IsControl))
+            throw new ArgumentException("Le pseudo doit contenir au plus 24 caractères affichables.", nameof(name));
         if (_players.Any(player => string.Equals(player.Name, name, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Le nom du joueur doit être unique.");
 

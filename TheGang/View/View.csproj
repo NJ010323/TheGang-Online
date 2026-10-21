@@ -10,6 +10,12 @@
 
     <ItemGroup>
       <ProjectReference Include="..\ViewModel\ViewModel.csproj" />
+      <ProjectReference Include="..\Network\Network.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="Assets\*.png" />
+      <Resource Include="Assets\*.png" />
     </ItemGroup>
 
 </Project>

@@ -1,12 +1,289 @@
-﻿<Window x:Class="View.MainWindow"
+<Window x:Class="View.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:View"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="The Gang" Width="1440" Height="900" MinWidth="960" MinHeight="680"
+        WindowStartupLocation="CenterScreen" Background="#0D0909" Foreground="#F8EDD9"
+        KeyDown="Window_KeyDown">
+    <Window.Resources>
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="Background" Value="#E5B958" />
+            <Setter Property="Foreground" Value="#22130F" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="20,11" />
+            <Setter Property="Margin" Value="0,0,10,10" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Frame" CornerRadius="7" Background="{TemplateBinding Background}"
+                                BorderBrush="#FFF0CE84" BorderThickness="1" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Frame" Property="Background" Value="#FFE3A2" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Frame" Property="Opacity" Value="0.42" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="QuietButton" TargetType="Button" BasedOn="{StaticResource ActionButton}">
+            <Setter Property="Background" Value="#332A25" />
+            <Setter Property="Foreground" Value="#F6E9CF" />
+        </Style>
+        <Style x:Key="EntryBox" TargetType="TextBox">
+            <Setter Property="Background" Value="#221B19" />
+            <Setter Property="Foreground" Value="#FFF4DF" />
+            <Setter Property="CaretBrush" Value="#F0C86A" />
+            <Setter Property="BorderBrush" Value="#877052" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Padding" Value="10,9" />
+            <Setter Property="Margin" Value="0,7,0,20" />
+        </Style>
+    </Window.Resources>
 
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="76" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="38" />
+        </Grid.RowDefinitions>
+
+        <!-- Barre commune à l'accueil, au lobby et à la partie. -->
+        <Grid Grid.Row="0" Background="#130D0D">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid Width="248" Height="68" HorizontalAlignment="Left" Margin="14,0,0,0">
+                <Image Source="Assets/box-title-ribbon.png" Stretch="Fill" />
+                <TextBlock Text="THE GANG" Foreground="#FFD26B" FontSize="28" FontWeight="Black"
+                           FontFamily="Georgia" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Margin="0,3,0,0" />
+            </Grid>
+            <TextBlock Grid.Column="1" Text="LE JEU DE POKER COOPÉRATIF" Foreground="#D3B573"
+                       FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
+                       HorizontalAlignment="Center" />
+            <Button x:Name="FullScreenButton" Grid.Column="2" Content="Plein écran  ·  F11"
+                    Style="{StaticResource QuietButton}" Margin="0,12,18,2" Click="FullScreen_Click" />
+        </Grid>
+
+        <!-- Menu principal. -->
+        <Grid x:Name="MenuPanel" Grid.Row="1">
+            <Image Source="Assets/table-felt.png" Stretch="UniformToFill" Opacity="0.72" />
+            <Rectangle>
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#EC100A0B" Offset="0" />
+                        <GradientStop Color="#A5100A0B" Offset="0.55" />
+                        <GradientStop Color="#25100A0B" Offset="1" />
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <Grid Margin="80,50">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="3*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Width="530" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="UN BRAQUAGE. UNE SEULE ÉQUIPE." Foreground="#F0C86A"
+                               FontSize="15" FontWeight="Bold" Margin="0,0,0,18" />
+                    <TextBlock Text="Lisez vos cartes.&#10;Classez vos forces.&#10;Gagnez ensemble."
+                               FontSize="40" FontFamily="Georgia" FontWeight="Bold" LineHeight="54"
+                               TextWrapping="Wrap" Margin="0,0,0,25" />
+                    <TextBlock Text="De 3 à 6 joueurs. Créez un lobby, partagez l'invitation et prenez place autour de la table."
+                               Foreground="#DFD0BC" FontSize="17" TextWrapping="Wrap" Width="465"
+                               HorizontalAlignment="Left" Margin="0,0,0,32" />
+                    <Button Content="Héberger une partie" Width="270" HorizontalAlignment="Left"
+                            Style="{StaticResource ActionButton}" Click="HostMenu_Click" />
+                    <Button Content="Rejoindre une partie" Width="270" HorizontalAlignment="Left"
+                            Style="{StaticResource QuietButton}" Click="JoinMenu_Click" />
+                    <Button Content="Quitter le jeu" Width="270" HorizontalAlignment="Left"
+                            Style="{StaticResource QuietButton}" Click="Quit_Click" />
+                </StackPanel>
+                <Grid Grid.Column="1" Width="500" Height="480" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Image Source="Assets/card-back.png" Width="205" Height="310" HorizontalAlignment="Center"
+                           VerticalAlignment="Center" Margin="-115,5,0,0">
+                        <Image.RenderTransform><RotateTransform Angle="-15" CenterX="100" CenterY="150" /></Image.RenderTransform>
+                    </Image>
+                    <Image Source="Assets/card-back.png" Width="205" Height="310" HorizontalAlignment="Center"
+                           VerticalAlignment="Center" Margin="115,-5,0,0">
+                        <Image.RenderTransform><RotateTransform Angle="13" CenterX="100" CenterY="150" /></Image.RenderTransform>
+                    </Image>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- Choix hôte/invité avant ouverture de la connexion. -->
+        <Grid x:Name="EntryPanel" Grid.Row="1" Visibility="Collapsed">
+            <Image Source="Assets/table-felt.png" Stretch="UniformToFill" Opacity="0.36" />
+            <Border Width="560" Padding="40" Background="#E9161012" BorderBrush="#8B7048"
+                    BorderThickness="1" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock x:Name="EntryTitle" Text="Héberger une partie" FontSize="31"
+                               FontFamily="Georgia" FontWeight="Bold" Foreground="#F6D17C" Margin="0,0,0,9" />
+                    <TextBlock x:Name="EntrySubtitle" Text="Choisissez votre pseudo et la taille de la table."
+                               Foreground="#CFC0A9" FontSize="15" Margin="0,0,0,30" />
+                    <TextBlock Text="VOTRE PSEUDO" Foreground="#E0C78A" FontWeight="SemiBold" />
+                    <TextBox x:Name="NicknameBox" Style="{StaticResource EntryBox}" MaxLength="24" />
+                    <StackPanel x:Name="HostSetup">
+                        <TextBlock Text="NOMBRE MAXIMAL DE JOUEURS" Foreground="#E0C78A" FontWeight="SemiBold" />
+                        <ComboBox x:Name="MaxPlayersBox" Width="110" Height="38" HorizontalAlignment="Left"
+                                  Margin="0,8,0,24" SelectedIndex="0" FontSize="16">
+                            <ComboBoxItem Content="3" /><ComboBoxItem Content="4" />
+                            <ComboBoxItem Content="5" /><ComboBoxItem Content="6" />
+                        </ComboBox>
+                        <Button x:Name="CreateButton" Content="Créer le lobby" Style="{StaticResource ActionButton}"
+                                HorizontalAlignment="Left" Width="230" Click="Create_Click" />
+                    </StackPanel>
+                    <StackPanel x:Name="JoinSetup" Visibility="Collapsed">
+                        <TextBlock Text="INVITATION REÇUE" Foreground="#E0C78A" FontWeight="SemiBold" />
+                        <TextBox x:Name="InvitationInput" Style="{StaticResource EntryBox}" />
+                        <Button x:Name="JoinButton" Content="Rejoindre la table" Style="{StaticResource ActionButton}"
+                                HorizontalAlignment="Left" Width="230" Click="Join_Click" />
+                    </StackPanel>
+                    <Button Content="← Retour au menu" Style="{StaticResource QuietButton}"
+                            HorizontalAlignment="Left" Margin="0,22,0,0" Click="BackMenu_Click" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Lobby avant départ. -->
+        <Grid x:Name="LobbyPanel" Grid.Row="1" Visibility="Collapsed">
+            <Image Source="Assets/table-felt.png" Stretch="UniformToFill" Opacity="0.43" />
+            <Grid Margin="60,35">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3*" />
+                    <ColumnDefinition Width="2*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Margin="0,0,35,0">
+                    <TextBlock Text="SALON DE JEU" Foreground="#E6BF69" FontWeight="Bold" FontSize="14" />
+                    <TextBlock Text="En attente des joueurs" FontSize="36" FontFamily="Georgia"
+                               FontWeight="Bold" Margin="0,10,0,20" />
+                    <TextBlock x:Name="LobbyDetails" FontSize="18" Foreground="#E7D6B9" Margin="0,0,0,22" />
+                    <TextBlock Text="INVITATION À PARTAGER" Foreground="#E6BF69" FontWeight="Bold" />
+                    <TextBox x:Name="InvitationOutput" Style="{StaticResource EntryBox}" IsReadOnly="True" />
+                    <WrapPanel>
+                        <Button Content="Copier l'invitation" Style="{StaticResource ActionButton}" Click="Copy_Click" />
+                        <Button x:Name="StartButton" Content="Lancer la partie" Style="{StaticResource ActionButton}"
+                                Click="Start_Click" />
+                        <Button x:Name="LeaveButton" Content="Quitter le lobby" Style="{StaticResource QuietButton}"
+                                Click="Leave_Click" />
+                    </WrapPanel>
+                    <TextBlock Text="La partie commence dès que l'hôte lance le jeu avec au moins trois joueurs."
+                               TextWrapping="Wrap" Foreground="#BBAE9C" Margin="0,18,0,0" />
+                </StackPanel>
+                <Border Grid.Column="1" Background="#D9141011" BorderBrush="#8B7048"
+                        BorderThickness="1" CornerRadius="12" Padding="25" VerticalAlignment="Center">
+                    <StackPanel>
+                        <TextBlock Text="AUTOUR DE LA TABLE" Foreground="#F0C86A" FontSize="17"
+                                   FontWeight="Bold" Margin="0,0,0,16" />
+                        <ListBox x:Name="PlayersList" Height="300" Background="Transparent" Foreground="#F8EDD9"
+                                 BorderThickness="0" FontSize="19" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- Plateau et tableau des choix. -->
+        <Grid x:Name="GamePanel" Grid.Row="1" Visibility="Collapsed" Background="#100A0B">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="72" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0" Margin="22,8,22,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="GamePhaseText" FontSize="24" FontFamily="Georgia" FontWeight="Bold"
+                               Foreground="#F0C86A" VerticalAlignment="Center" />
+                    <TextBlock x:Name="GameScoreText" FontSize="15" Foreground="#D4C6B4"
+                               VerticalAlignment="Center" Margin="24,0,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="HistoryToggleButton" Content="Masquer le tableau"
+                            Style="{StaticResource QuietButton}" Click="HistoryToggle_Click" />
+                    <Button Content="Quitter la partie" Style="{StaticResource QuietButton}"
+                            Click="ExitGame_Click" />
+                </StackPanel>
+            </Grid>
+            <Grid Grid.Row="1" Margin="16,0,16,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition x:Name="HistoryColumn" Width="306" />
+                </Grid.ColumnDefinitions>
+                <Border BorderBrush="#806441" BorderThickness="1" CornerRadius="14" ClipToBounds="True">
+                    <Viewbox Stretch="Uniform">
+                        <Canvas Width="1280" Height="720" Background="#180808">
+                            <Image Source="Assets/table-felt.png" Width="1280" Height="720" Stretch="Fill" />
+                            <TextBlock Text="CARTES COMMUNES" Foreground="#DDC187" FontSize="18"
+                                       FontWeight="Bold" Canvas.Left="530" Canvas.Top="282" />
+                            <StackPanel x:Name="CommunityCardsPanel" Orientation="Horizontal"
+                                        Canvas.Left="425" Canvas.Top="318" />
+                            <TextBlock x:Name="TablePhaseText" Foreground="#E6C37D" FontSize="18"
+                                       TextAlignment="Center" Width="560" Canvas.Left="360" Canvas.Top="442" />
+                            <Canvas x:Name="SeatsCanvas" Width="1280" Height="720" />
+                        </Canvas>
+                    </Viewbox>
+                </Border>
+                <Border x:Name="HistoryPanel" Grid.Column="1" Background="#E3161012" BorderBrush="#806441"
+                        BorderThickness="1" CornerRadius="10" Margin="12,0,0,0" Padding="14">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+                            <TextBlock Text="TABLEAU DES JETONS" FontSize="17" FontWeight="Bold"
+                                       Foreground="#F0C86A" />
+                            <TextBlock Text="Choix de chaque joueur, tour par tour"
+                                       Foreground="#BBAE9C" FontSize="12" Margin="0,5,0,0" />
+                        </StackPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="HistoryRowsPanel" />
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Grid>
+            <Border Grid.Row="2" Background="#211515" BorderBrush="#665032" BorderThickness="0,1,0,0"
+                    Padding="18,12,18,8">
+                <StackPanel>
+                    <WrapPanel x:Name="TokenActions" HorizontalAlignment="Center">
+                        <TextBlock Text="MON JETON" Foreground="#E9C575" VerticalAlignment="Center"
+                                   FontWeight="Bold" Margin="0,0,10,8" />
+                        <ComboBox x:Name="TokenBox" Width="64" Height="37" Margin="0,0,10,8" FontSize="16" />
+                        <Button x:Name="TakeTokenButton" Content="Prendre / échanger" Style="{StaticResource ActionButton}"
+                                Click="TakeToken_Click" />
+                        <Button x:Name="ReturnTokenButton" Content="Rendre" Style="{StaticResource QuietButton}"
+                                Click="ReturnToken_Click" />
+                        <Button x:Name="ConfirmButton" Content="Confirmer mon choix" Style="{StaticResource ActionButton}"
+                                Click="Confirm_Click" />
+                        <Button x:Name="WithdrawButton" Content="Retirer ma confirmation"
+                                Style="{StaticResource QuietButton}" Click="Withdraw_Click" />
+                    </WrapPanel>
+                    <WrapPanel x:Name="HostActions" HorizontalAlignment="Center">
+                        <Button x:Name="AdvanceButton" Content="Révéler le tour suivant" Style="{StaticResource ActionButton}"
+                                Click="Advance_Click" />
+                        <Button x:Name="RevealButton" Content="Révéler la prochaine main" Style="{StaticResource ActionButton}"
+                                Click="Reveal_Click" />
+                        <Button x:Name="ResolveButton" Content="Résoudre le braquage" Style="{StaticResource ActionButton}"
+                                Click="Resolve_Click" />
+                        <Button x:Name="NextHeistButton" Content="Braquage suivant" Style="{StaticResource ActionButton}"
+                                Click="NextHeist_Click" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="2" Background="#160F10">
+            <TextBlock x:Name="StatusText" Foreground="#F2D28E" FontSize="13"
+                       Margin="20,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        </Grid>
     </Grid>
 </Window>
