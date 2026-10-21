@@ -13,6 +13,9 @@ namespace View;
 /// <summary>Fabrique les cartes, jetons et places du plateau à partir des seules données autorisées.</summary>
 internal static class TableVisuals
 {
+    /// <summary>Préférence locale : les mouvements du plateau peuvent être réduits dans les paramètres.</summary>
+    public static bool AnimationsEnabled { get; set; } = true;
+
     private static readonly ImageSource CardBack = new BitmapImage(
         new Uri("pack://application:,,,/View;component/Assets/card-back.png", UriKind.Absolute));
     private static readonly BitmapSource ChipAtlas = new BitmapImage(
@@ -193,16 +196,26 @@ internal static class TableVisuals
     /// <summary>Anime brièvement l'apparition d'une carte ou d'une place révélée.</summary>
     public static void Reveal(UIElement element)
     {
+        if (!AnimationsEnabled)
+        {
+            element.BeginAnimation(UIElement.OpacityProperty, null);
+            element.Opacity = 1;
+            return;
+        }
         element.Opacity = 0;
         element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1,
             TimeSpan.FromMilliseconds(440)));
     }
 
     /// <summary>Fait respirer discrètement la place du prochain joueur à révéler.</summary>
-    private static void Pulse(UIElement element) => element.BeginAnimation(UIElement.OpacityProperty,
-        new DoubleAnimation(0.72, 1, TimeSpan.FromMilliseconds(850))
+    private static void Pulse(UIElement element)
+    {
+        if (!AnimationsEnabled) return;
+        element.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(0.72, 1, TimeSpan.FromMilliseconds(850))
         {
             AutoReverse = true,
             RepeatBehavior = RepeatBehavior.Forever
         });
+    }
 }

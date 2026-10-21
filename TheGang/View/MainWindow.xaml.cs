@@ -17,6 +17,9 @@ public partial class MainWindow : Window
     private DesktopLobbySession? _session;
     // Les instantanés réseau alimentent le plateau toutes les deux secondes.
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
+    // Les confirmations brèves s'effacent ; les erreurs attendent une action du joueur.
+    private readonly DispatcherTimer _noticeTimer = new() { Interval = TimeSpan.FromSeconds(5) };
+    private bool _connectionWarning;
     // Ces indicateurs empêchent de superposer des requêtes ou des actions utilisateur.
     private bool _refreshing;
     private bool _busy;
@@ -38,6 +41,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _refreshTimer.Tick += RefreshTimer_Tick;
+        _noticeTimer.Tick += (_, _) => HideNotice();
     }
 
     /// <summary>Ouvre les champs de création sans démarrer encore de serveur.</summary>
@@ -56,7 +60,7 @@ public partial class MainWindow : Window
         EntryTitle.Text = isHost ? "Héberger une partie" : "Rejoindre une partie";
         EntrySubtitle.Text = isHost ? "Choisissez votre pseudo et la taille de la table." :
             "Saisissez votre pseudo et l'invitation envoyée par l'hôte.";
-        StatusText.Text = string.Empty;
+        HideNotice();
         NicknameBox.Focus();
     }
 
@@ -65,29 +69,59 @@ public partial class MainWindow : Window
     {
         EntryPanel.Visibility = Visibility.Collapsed;
         MenuPanel.Visibility = Visibility.Visible;
-        StatusText.Text = string.Empty;
+        HideNotice();
     }
 
     /// <summary>Ferme le jeu via le menu.</summary>
     private void Quit_Click(object sender, RoutedEventArgs e) => Close();
 
-    /// <summary>Bascule entre fenêtre normale et plein écran sans perdre la taille précédente.</summary>
-    private void FullScreen_Click(object sender, RoutedEventArgs e) => ToggleFullScreen();
+    /// <summary>Ouvre les paramètres d'affichage et synchronise les choix avec la fenêtre.</summary>
+    private void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        WindowedOption.IsChecked = !_isFullScreen;
+        FullScreenOption.IsChecked = _isFullScreen;
+        AnimationsOnOption.IsChecked = TableVisuals.AnimationsEnabled;
+        AnimationsOffOption.IsChecked = !TableVisuals.AnimationsEnabled;
+        SettingsOverlay.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>Ferme le panneau des paramètres sans changer la session en cours.</summary>
+    private void CloseSettings_Click(object sender, RoutedEventArgs e) =>
+        SettingsOverlay.Visibility = Visibility.Collapsed;
+
+    /// <summary>Applique immédiatement le mode d'affichage choisi dans les paramètres.</summary>
+    private void WindowedMode_Click(object sender, RoutedEventArgs e) => SetFullScreen(false);
+    private void FullScreenMode_Click(object sender, RoutedEventArgs e) => SetFullScreen(true);
+
+    /// <summary>Active ou réduit les mouvements décoratifs sans toucher à la partie.</summary>
+    private void AnimationsOn_Click(object sender, RoutedEventArgs e) => TableVisuals.AnimationsEnabled = true;
+    private void AnimationsOff_Click(object sender, RoutedEventArgs e) => TableVisuals.AnimationsEnabled = false;
 
     /// <summary>F11 active le plein écran ; Échap en sort.</summary>
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F11 || e.Key == Key.Escape && _isFullScreen)
+        if (e.Key == Key.F11)
         {
-            ToggleFullScreen();
+            SetFullScreen(!_isFullScreen);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && SettingsOverlay.Visibility == Visibility.Visible)
+        {
+            SettingsOverlay.Visibility = Visibility.Collapsed;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && _isFullScreen)
+        {
+            SetFullScreen(false);
             e.Handled = true;
         }
     }
 
     /// <summary>Conserve les réglages de fenêtre pour pouvoir les rétablir exactement.</summary>
-    private void ToggleFullScreen()
+    private void SetFullScreen(bool enabled)
     {
-        if (!_isFullScreen)
+        if (_isFullScreen == enabled) return;
+        if (enabled)
         {
             _savedWindowState = WindowState;
             _savedWindowStyle = WindowStyle;
@@ -96,7 +130,6 @@ public partial class MainWindow : Window
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
             WindowState = WindowState.Maximized;
-            FullScreenButton.Content = "Quitter le plein écran  ·  F11";
         }
         else
         {
@@ -104,15 +137,17 @@ public partial class MainWindow : Window
             WindowStyle = _savedWindowStyle;
             ResizeMode = _savedResizeMode;
             WindowState = _savedWindowState;
-            FullScreenButton.Content = "Plein écran  ·  F11";
         }
-        _isFullScreen = !_isFullScreen;
+        _isFullScreen = enabled;
+        WindowedOption.IsChecked = !enabled;
+        FullScreenOption.IsChecked = enabled;
     }
 
     /// <summary>Crée le serveur et son tunnel après validation du pseudo.</summary>
     private async void Create_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
     {
-        var maxPlayers = int.Parse(((ComboBoxItem)MaxPlayersBox.SelectedItem).Content.ToString()!);
+        var maxPlayers = Players6Option.IsChecked == true ? 6 :
+            Players5Option.IsChecked == true ? 5 : Players4Option.IsChecked == true ? 4 : 3;
         _session = await DesktopLobbySession.CreateAsync(NicknameBox.Text, maxPlayers);
         EnterLobby();
     });
@@ -144,7 +179,7 @@ public partial class MainWindow : Window
     private void Copy_Click(object sender, RoutedEventArgs e)
     {
         Clipboard.SetText(InvitationOutput.Text);
-        StatusText.Text = "Invitation copiée.";
+        ShowNotice("Invitation copiée. Vous pouvez l'envoyer aux autres joueurs.", NoticeLevel.Success);
     }
 
     /// <summary>L'hôte distribue les cartes lorsque trois joueurs ou plus sont présents.</summary>
@@ -203,8 +238,11 @@ public partial class MainWindow : Window
                 if (_session != session) return;
                 RenderGame(game);
             }
-            if (StatusText.Text.StartsWith("Connexion perdue :", StringComparison.Ordinal))
-                StatusText.Text = string.Empty;
+            if (_connectionWarning)
+            {
+                _connectionWarning = false;
+                HideNotice();
+            }
         }
         catch (Exception error) when (_session == session && !session.IsHost &&
                                       LobbyConnectionFailure.IsHostUnavailable(error))
@@ -213,7 +251,11 @@ public partial class MainWindow : Window
         }
         catch (Exception error)
         {
-            if (_session == session) StatusText.Text = $"Connexion perdue : {error.Message}";
+            if (_session == session)
+            {
+                _connectionWarning = true;
+                ShowNotice($"Connexion perdue : {error.Message}", NoticeLevel.Error, autoHide: false);
+            }
         }
         finally { _refreshing = false; }
     }
@@ -432,16 +474,17 @@ public partial class MainWindow : Window
         CreateButton.IsEnabled = JoinButton.IsEnabled = StartButton.IsEnabled = false;
         try
         {
-            StatusText.Text = "Action en cours…";
+            _connectionWarning = false;
+            ShowNotice("Action en cours…", autoHide: false);
             await operation();
-            if (StatusText.Text == "Action en cours…") StatusText.Text = string.Empty;
+            if (StatusText.Text == "Action en cours…") HideNotice();
         }
         catch (Exception error) when (_session is { IsHost: false } &&
                                       LobbyConnectionFailure.IsHostUnavailable(error))
         {
             await ReturnToMenuAsync("La partie s'est terminée : l'hôte ou un joueur a quitté la table.");
         }
-        catch (Exception error) { StatusText.Text = error.Message; }
+        catch (Exception error) { ShowNotice(error.Message, NoticeLevel.Error, autoHide: false); }
         finally
         {
             _busy = false;
@@ -474,13 +517,51 @@ public partial class MainWindow : Window
         _lastRenderedPhase = null;
         _lastHeistNumber = _lastCommunityCount = 0;
         _visibleHands.Clear();
-        StatusText.Text = message;
+        _connectionWarning = false;
+        if (string.IsNullOrWhiteSpace(message)) HideNotice();
+        else ShowNotice(message, NoticeLevel.Info, autoHide: false);
     }
+
+    /// <summary>Affiche un message central selon sa gravité et sa durée de lecture.</summary>
+    private void ShowNotice(string message, NoticeLevel level = NoticeLevel.Info, bool autoHide = true)
+    {
+        _noticeTimer.Stop();
+        StatusText.Text = message;
+        NoticeIcon.Text = level switch
+        {
+            NoticeLevel.Success => "✓",
+            NoticeLevel.Error => "!",
+            _ => "i"
+        };
+        NoticeBanner.BorderBrush = level switch
+        {
+            NoticeLevel.Success => new SolidColorBrush(Color.FromRgb(139, 203, 137)),
+            NoticeLevel.Error => new SolidColorBrush(Color.FromRgb(242, 117, 104)),
+            _ => new SolidColorBrush(Color.FromRgb(229, 185, 88))
+        };
+        NoticeIcon.Foreground = NoticeBanner.BorderBrush;
+        NoticeBanner.Visibility = Visibility.Visible;
+        if (autoHide) _noticeTimer.Start();
+    }
+
+    /// <summary>Masque le message sans affecter la session de jeu.</summary>
+    private void HideNotice()
+    {
+        _noticeTimer.Stop();
+        NoticeBanner.Visibility = Visibility.Collapsed;
+        StatusText.Text = string.Empty;
+    }
+
+    /// <summary>Permet de fermer explicitement une erreur persistante.</summary>
+    private void NoticeClose_Click(object sender, RoutedEventArgs e) => HideNotice();
+
+    private enum NoticeLevel { Info, Success, Error }
 
     /// <summary>Notifie le serveur du départ avant de fermer l'application.</summary>
     protected override void OnClosed(EventArgs e)
     {
         _refreshTimer.Stop();
+        _noticeTimer.Stop();
         var session = _session;
         _session = null;
         if (session is not null)

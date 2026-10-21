@@ -37,14 +37,66 @@
             <Setter Property="Foreground" Value="#F6E9CF" />
         </Style>
         <Style x:Key="EntryBox" TargetType="TextBox">
-            <Setter Property="Background" Value="#221B19" />
+            <Setter Property="Background" Value="#1B1414" />
             <Setter Property="Foreground" Value="#FFF4DF" />
             <Setter Property="CaretBrush" Value="#F0C86A" />
-            <Setter Property="BorderBrush" Value="#877052" />
-            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="SelectionBrush" Value="#D4A64D" />
+            <Setter Property="BorderBrush" Value="#967347" />
+            <Setter Property="BorderThickness" Value="1.5" />
             <Setter Property="FontSize" Value="16" />
-            <Setter Property="Padding" Value="10,9" />
+            <Setter Property="Padding" Value="14,10" />
             <Setter Property="Margin" Value="0,7,0,20" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="InputFrame" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10" Padding="{TemplateBinding Padding}">
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="InputFrame" Property="BorderBrush" Value="#F4C969" />
+                            </Trigger>
+                            <Trigger Property="IsReadOnly" Value="True">
+                                <Setter TargetName="InputFrame" Property="Background" Value="#2B2020" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Boutons segmentés partagés par la capacité du lobby et les paramètres. -->
+        <Style x:Key="SelectionChoice" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="#F4E5CA" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="ChoiceFrame" Background="#2A1D1C" BorderBrush="#8C6943"
+                                BorderThickness="1.5" CornerRadius="9" Padding="13,10">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ChoiceFrame" Property="BorderBrush" Value="#F1C66A" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ChoiceFrame" Property="Background" Value="#E5B958" />
+                                <Setter TargetName="ChoiceFrame" Property="BorderBrush" Value="#FFDF89" />
+                                <Setter Property="Foreground" Value="#21130E" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="ChoiceFrame" Property="BorderBrush" Value="White" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -52,27 +104,22 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="76" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="38" />
         </Grid.RowDefinitions>
 
         <!-- Barre commune à l'accueil, au lobby et à la partie. -->
-        <Grid Grid.Row="0" Background="#130D0D">
+        <Grid Grid.Row="0" Background="#080707">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="220" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Grid Width="248" Height="68" HorizontalAlignment="Left" Margin="14,0,0,0">
-                <Image Source="Assets/box-title-ribbon.png" Stretch="Fill" />
-                <TextBlock Text="THE GANG" Foreground="#FFD26B" FontSize="28" FontWeight="Black"
-                           FontFamily="Georgia" HorizontalAlignment="Center" VerticalAlignment="Center"
-                           Margin="0,3,0,0" />
-            </Grid>
+            <Image Source="Assets/logo-reference.png" Width="184" Height="58" Stretch="None"
+                   HorizontalAlignment="Left" VerticalAlignment="Center" Margin="16,0,0,0" />
             <TextBlock Grid.Column="1" Text="LE JEU DE POKER COOPÉRATIF" Foreground="#D3B573"
                        FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
                        HorizontalAlignment="Center" />
-            <Button x:Name="FullScreenButton" Grid.Column="2" Content="Plein écran  ·  F11"
-                    Style="{StaticResource QuietButton}" Margin="0,12,18,2" Click="FullScreen_Click" />
+            <Button Grid.Column="2" Content="⚙  Paramètres" AutomationProperties.Name="Ouvrir les paramètres"
+                    Style="{StaticResource QuietButton}" Margin="0,12,18,2" Click="Settings_Click" />
         </Grid>
 
         <!-- Menu principal. -->
@@ -135,11 +182,18 @@
                     <TextBox x:Name="NicknameBox" Style="{StaticResource EntryBox}" MaxLength="24" />
                     <StackPanel x:Name="HostSetup">
                         <TextBlock Text="NOMBRE MAXIMAL DE JOUEURS" Foreground="#E0C78A" FontWeight="SemiBold" />
-                        <ComboBox x:Name="MaxPlayersBox" Width="110" Height="38" HorizontalAlignment="Left"
-                                  Margin="0,8,0,24" SelectedIndex="0" FontSize="16">
-                            <ComboBoxItem Content="3" /><ComboBoxItem Content="4" />
-                            <ComboBoxItem Content="5" /><ComboBoxItem Content="6" />
-                        </ComboBox>
+                        <TextBlock Text="Choisissez la taille de la table, hôte compris."
+                                   Foreground="#BBAE9C" FontSize="13" Margin="0,5,0,12" />
+                        <UniformGrid Columns="4" Margin="0,0,0,25">
+                            <RadioButton x:Name="Players3Option" Content="3" GroupName="LobbyCapacity"
+                                         IsChecked="True" Style="{StaticResource SelectionChoice}" />
+                            <RadioButton x:Name="Players4Option" Content="4" GroupName="LobbyCapacity"
+                                         Style="{StaticResource SelectionChoice}" />
+                            <RadioButton x:Name="Players5Option" Content="5" GroupName="LobbyCapacity"
+                                         Style="{StaticResource SelectionChoice}" />
+                            <RadioButton x:Name="Players6Option" Content="6" GroupName="LobbyCapacity"
+                                         Style="{StaticResource SelectionChoice}" />
+                        </UniformGrid>
                         <Button x:Name="CreateButton" Content="Créer le lobby" Style="{StaticResource ActionButton}"
                                 HorizontalAlignment="Left" Width="230" Click="Create_Click" />
                     </StackPanel>
@@ -281,9 +335,63 @@
             </Border>
         </Grid>
 
-        <Grid Grid.Row="2" Background="#160F10">
-            <TextBlock x:Name="StatusText" Foreground="#F2D28E" FontSize="13"
-                       Margin="20,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        <!-- Panneau modal des réglages, disponible depuis tous les écrans. -->
+        <Grid x:Name="SettingsOverlay" Grid.RowSpan="2" Panel.ZIndex="20" Visibility="Collapsed"
+              Background="#D0080708">
+            <Border Width="570" Padding="35" Background="#191112" BorderBrush="#A8874C"
+                    BorderThickness="1.5" CornerRadius="16" HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel>
+                    <Grid Margin="0,0,0,22">
+                        <TextBlock Text="Paramètres" FontFamily="Georgia" FontWeight="Bold" FontSize="32"
+                                   Foreground="#F4CE75" VerticalAlignment="Center" />
+                        <Button Content="Fermer" Style="{StaticResource QuietButton}"
+                                HorizontalAlignment="Right" Margin="0" Click="CloseSettings_Click" />
+                    </Grid>
+                    <TextBlock Text="AFFICHAGE" Foreground="#F0C86A" FontWeight="Bold" FontSize="14" />
+                    <TextBlock Text="Choisissez comment afficher la table. F11 permet aussi de changer de mode."
+                               Foreground="#C9BBA6" TextWrapping="Wrap" Margin="0,5,0,13" />
+                    <UniformGrid Columns="2" Margin="0,0,0,28">
+                        <RadioButton x:Name="WindowedOption" Content="Fenêtré" GroupName="DisplayMode"
+                                     IsChecked="True" Style="{StaticResource SelectionChoice}"
+                                     Click="WindowedMode_Click" />
+                        <RadioButton x:Name="FullScreenOption" Content="Plein écran" GroupName="DisplayMode"
+                                     Style="{StaticResource SelectionChoice}" Click="FullScreenMode_Click" />
+                    </UniformGrid>
+                    <TextBlock Text="EFFETS DE TABLE" Foreground="#F0C86A" FontWeight="Bold" FontSize="14" />
+                    <TextBlock Text="Animation des nouvelles cartes et de la prochaine main à révéler."
+                               Foreground="#C9BBA6" TextWrapping="Wrap" Margin="0,5,0,13" />
+                    <UniformGrid Columns="2">
+                        <RadioButton x:Name="AnimationsOnOption" Content="Animés" GroupName="AnimationMode"
+                                     IsChecked="True" Style="{StaticResource SelectionChoice}"
+                                     Click="AnimationsOn_Click" />
+                        <RadioButton x:Name="AnimationsOffOption" Content="Désactivés" GroupName="AnimationMode"
+                                     Style="{StaticResource SelectionChoice}" Click="AnimationsOff_Click" />
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
         </Grid>
+
+        <!-- Notification visible au centre en haut, sans masquer les commandes. -->
+        <Border x:Name="NoticeBanner" Grid.RowSpan="2" Panel.ZIndex="30" Visibility="Collapsed"
+                Background="#F3231B18" BorderBrush="#E5B958" BorderThickness="1.5"
+                CornerRadius="11" Padding="18,13" MinWidth="420" MaxWidth="760"
+                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,88,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="36" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="42" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="NoticeIcon" Text="i" FontSize="24" FontWeight="Bold"
+                           Foreground="#F0C86A" VerticalAlignment="Center" />
+                <TextBlock x:Name="StatusText" Grid.Column="1" Foreground="#FFF4DC"
+                           FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="2" Content="✕" Style="{StaticResource QuietButton}"
+                        Width="36" Height="36" Padding="0" Margin="6,0,0,0"
+                        AutomationProperties.Name="Fermer le message" Click="NoticeClose_Click" />
+            </Grid>
+        </Border>
     </Grid>
 </Window>

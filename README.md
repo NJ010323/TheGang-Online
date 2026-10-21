@@ -29,11 +29,11 @@ Si l'hôte ferme l'application ou devient injoignable, les invités reviennent a
 
 ## Interface de jeu
 
-Le menu permet d'héberger, de rejoindre ou de quitter le jeu. Le bouton **Plein écran** et la touche **F11** basculent l'affichage ; **Échap** quitte le plein écran. Dans le lobby, l'hôte lance la partie quand au moins trois joueurs sont présents.
+Le menu permet d'héberger, de rejoindre ou de quitter le jeu. Le panneau **Paramètres** propose le mode fenêtré ou plein écran ainsi que l'activation des animations du plateau. **F11** change aussi le mode d'affichage ; **Échap** ferme les paramètres ou quitte le plein écran. L'hôte choisit la capacité du lobby avec les boutons 3 à 6 joueurs, puis lance la partie quand au moins trois joueurs sont présents. Les confirmations et erreurs s'affichent dans un bandeau visible en haut de l'écran.
 
 Pendant la partie, le joueur local est en bas du tapis et les autres joueurs sont répartis autour de la table. Leurs cartes restent face cachée jusqu'à la révélation autorisée par le serveur. Les jetons courants sont visibles à chaque place ; le tableau latéral indique les valeurs de jeton blanc, jaune, orange et rouge de chaque joueur, y compris celles des tours précédents. Le tableau peut être masqué pour agrandir le tapis. Les nouvelles cartes communes apparaissent avec un fondu et la place du prochain joueur à révéler est mise en évidence.
 
-**Quitter la partie** après son démarrage ferme le lobby pour tous : le moteur ne peut pas continuer un braquage avec un joueur manquant. Les autres joueurs reviennent automatiquement à l'accueil. Les images du tapis, du dos des cartes, des jetons et du bandeau inspiré de la boîte sont intégrées comme ressources dans `View/Assets`.
+**Quitter la partie** après son démarrage ferme le lobby pour tous : le moteur ne peut pas continuer un braquage avec un joueur manquant. Les autres joueurs reviennent automatiquement à l'accueil. Les images du tapis, du dos des cartes, des jetons et du logo de la boîte sont intégrées comme ressources dans `View/Assets`.
 
 ```mermaid
 flowchart LR
