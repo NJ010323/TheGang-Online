@@ -121,6 +121,9 @@ public class NetworkLobbyTests
         var afterFlop = await chloe.GetGameAsync();
         Assert.Equal(3, afterFlop.CommunityCards.Count);
         Assert.All(afterFlop.Players, p => Assert.Contains(p.Signals, s => s.Value is >= 1 and <= 3));
+        Assert.Equal(GameEventKind.RoundRevealed, afterFlop.RecentEvents[^1].Kind);
+        Assert.Equal(GamePhase.Flop, afterFlop.RecentEvents[^1].Phase);
+        Assert.Equal(afterFlop.RecentEvents[^1], (await bob.GetGameAsync()).RecentEvents[^1]);
 
         await PlayRoundAsync(host, bob, chloe);
         Assert.Equal(GamePhase.Turn,
@@ -145,6 +148,82 @@ public class NetworkLobbyTests
         }
         var result = await host.ApplyAsync(new GameActionRequest(GameAction.ResolveHeist));
         Assert.True(result.Phase is GamePhase.HeistComplete or GamePhase.Finished);
+        Assert.Equal(3, result.RecentEvents.Count(action => action.Kind == GameEventKind.HandRevealed));
+        Assert.Equal(GameEventKind.HeistResolved, result.RecentEvents[^1].Kind);
+        Assert.Equal(result.LastHeistSucceeded, result.RecentEvents[^1].HeistSucceeded);
+        // Chaque écran reçoit la même issue pour lancer la même animation de coffre.
+        Assert.Equal(result.RecentEvents[^1], (await bob.GetGameAsync()).RecentEvents[^1]);
+        Assert.Equal(result.RecentEvents[^1], (await chloe.GetGameAsync()).RecentEvents[^1]);
+    }
+
+    [Fact]
+    public async Task SimultaneousClaimsOfOnePhysicalTokenAreOrderedForEveryPlayer()
+    {
+        await using var server = await LobbyHttpServer.StartAsync("Host", 3);
+        using var host = new LobbyHttpClient(server.LocalAddress);
+        using var bob = new LobbyHttpClient(server.LocalAddress);
+        using var chloe = new LobbyHttpClient(server.LocalAddress);
+        host.SetHostIdentity(server.Lobby.HostIdentity);
+        await bob.JoinAsync("Bob", server.Lobby.InvitationSecret);
+        await chloe.JoinAsync("Chloe", server.Lobby.InvitationSecret);
+        await host.StartAsync();
+
+        // Les requêtes arrivent dans un ordre indéterminé ; l'hôte les sérialise.
+        await Task.WhenAll(new[] { host, bob, chloe }.Select(client =>
+            client.ApplyAsync(new GameActionRequest(GameAction.TakeToken, 1))));
+        var snapshot = await host.GetGameAsync();
+        var movements = snapshot.RecentEvents.Where(action => action.Kind is
+            GameEventKind.TokenTaken or GameEventKind.TokenStolen).ToArray();
+
+        Assert.Equal(3, movements.Length);
+        Assert.Equal(GameEventKind.TokenTaken, movements[0].Kind);
+        Assert.All(movements.Skip(1), action => Assert.Equal(GameEventKind.TokenStolen, action.Kind));
+        for (var index = 1; index < movements.Length; index++)
+            Assert.Equal(movements[index - 1].ActorId, movements[index].FromPlayerId);
+        Assert.Equal(movements.Select(action => action.Sequence).Order(),
+            movements.Select(action => action.Sequence));
+        Assert.Equal(movements[^1].ActorId, snapshot.Players.Single(player => player.CurrentToken == 1).Id);
+        Assert.Equal(1, snapshot.Players.Count(player => player.CurrentToken == 1));
+        Assert.False(snapshot.AllPlayersHaveTokens);
+    }
+
+    [Fact]
+    public async Task LiveDragIsVisibleWithoutTakingTheTokenAndCannotReturnAfterDrop()
+    {
+        await using var server = await LobbyHttpServer.StartAsync("Host", 3);
+        using var host = new LobbyHttpClient(server.LocalAddress);
+        using var bob = new LobbyHttpClient(server.LocalAddress);
+        using var chloe = new LobbyHttpClient(server.LocalAddress);
+        host.SetHostIdentity(server.Lobby.HostIdentity);
+        var bobId = (await bob.JoinAsync("Bob", server.Lobby.InvitationSecret)).PlayerId;
+        await chloe.JoinAsync("Chloe", server.Lobby.InvitationSecret);
+        await host.StartAsync();
+
+        var gestureId = Guid.NewGuid();
+        await bob.UpdateDragAsync(new GameDragRequest(gestureId, 2, 1, 530, 520, true));
+        var moving = await host.GetGameAsync();
+        var drag = Assert.Single(moving.ActiveDrags);
+        Assert.Equal(bobId, drag.PlayerId);
+        Assert.Equal(2, drag.TokenValue);
+        Assert.Equal(530, drag.X);
+        Assert.Contains(2, moving.AvailableTokens);
+        Assert.All(moving.Players, player => Assert.Null(player.CurrentToken));
+
+        await bob.UpdateDragAsync(new GameDragRequest(gestureId, 2, 2, 600, 580, true));
+        await bob.UpdateDragAsync(new GameDragRequest(gestureId, 2, 1, 400, 440, true));
+        Assert.Equal(600, Assert.Single((await host.GetGameAsync()).ActiveDrags).X);
+
+        await bob.ApplyAsync(new GameActionRequest(GameAction.TakeToken, 2, gestureId));
+        await bob.UpdateDragAsync(new GameDragRequest(gestureId, 2, 3, 700, 650, true));
+        var dropped = await host.GetGameAsync();
+        Assert.Empty(dropped.ActiveDrags);
+        Assert.Equal(2, dropped.Players.Single(player => player.Id == bobId).CurrentToken);
+
+        var cancelledGesture = Guid.NewGuid();
+        await bob.UpdateDragAsync(new GameDragRequest(cancelledGesture, 1, 1, 520, 520, true));
+        await bob.UpdateDragAsync(new GameDragRequest(cancelledGesture, 1, 2, 520, 520, false));
+        await bob.UpdateDragAsync(new GameDragRequest(cancelledGesture, 1, 3, 650, 550, true));
+        Assert.Empty((await host.GetGameAsync()).ActiveDrags);
     }
 
     [Fact]

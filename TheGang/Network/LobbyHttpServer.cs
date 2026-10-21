@@ -79,6 +79,9 @@ public sealed class LobbyHttpServer : IAsyncDisposable
         app.MapPost("/lobbies/{code}/game/actions", (string code, HttpRequest request,
             GameActionRequest action) =>
             Respond(() => lobby.Apply(code, SessionToken(request), action)));
+        app.MapPost("/lobbies/{code}/game/drag", (string code, HttpRequest request,
+            GameDragRequest drag) =>
+            Respond(() => lobby.UpdateDrag(code, SessionToken(request), drag)));
     }
 
     /// <summary>Lit le secret de session sans accepter d'identifiant de joueur fourni par le client.</summary>

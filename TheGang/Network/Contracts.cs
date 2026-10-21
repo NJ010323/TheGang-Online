@@ -19,12 +19,29 @@ public sealed record SignalSnapshot(TokenColors Color, int Value);
 /// <summary>Vue d'un joueur ; seules ses propres cartes ou des cartes dévoilées sont présentes.</summary>
 public sealed record PlayerSnapshot(Guid Id, string Name, IReadOnlyList<CardSnapshot> Hand,
     IReadOnlyList<SignalSnapshot> Signals, int? CurrentToken, bool IsChoiceConfirmed);
+/// <summary>Type d'action publique à afficher et animer sur tous les clients.</summary>
+public enum GameEventKind
+{
+    HeistStarted, TokenTaken, TokenStolen, TokenReturned, ChoiceConfirmed,
+    ConfirmationWithdrawn, RoundRevealed, HandRevealed, HeistResolved
+}
+/// <summary>Événement ordonné du serveur ; il ne contient ni main cachée ni secret de session.</summary>
+public sealed record GameEventSnapshot(long Sequence, GameEventKind Kind, Guid ActorId,
+    string ActorName, GamePhase Phase, int HeistNumber, int? TokenValue = null, Guid? FromPlayerId = null,
+    string? FromPlayerName = null, bool? HeistSucceeded = null);
+/// <summary>Position temporaire d'un jeton pendant le geste d'un joueur, en coordonnées du tapis.</summary>
+public sealed record GameDragSnapshot(Guid PlayerId, string PlayerName, Guid GestureId,
+    int TokenValue, long Revision, double X, double Y);
+/// <summary>Mise à jour éphémère du glissement ; seul le dépôt change le propriétaire du jeton.</summary>
+public sealed record GameDragRequest(Guid GestureId, int TokenValue, long Revision,
+    double X, double Y, bool IsActive);
 /// <summary>Vue autorisée de la partie pour une seule connexion.</summary>
 public sealed record GameSnapshot(GamePhase Phase, GameResult Result, int HeistNumber,
     int SuccessfulHeists, int FailedHeists, bool? LastHeistSucceeded,
     IReadOnlyList<CardSnapshot> CommunityCards, IReadOnlyList<PlayerSnapshot> Players,
     IReadOnlyList<int> AvailableTokens, bool AllPlayersHaveTokens, bool AllChoicesConfirmed,
-    Guid? NextPlayerToRevealId);
+    Guid? NextPlayerToRevealId, IReadOnlyList<GameEventSnapshot> RecentEvents,
+    IReadOnlyList<GameDragSnapshot> ActiveDrags);
 
 /// <summary>Actions acceptées par le serveur de partie.</summary>
 public enum GameAction
@@ -34,4 +51,4 @@ public enum GameAction
 }
 
 /// <summary>Commande de jeu ; le serveur déduit le joueur de son jeton de session.</summary>
-public sealed record GameActionRequest(GameAction Action, int? TokenValue = null);
+public sealed record GameActionRequest(GameAction Action, int? TokenValue = null, Guid? GestureId = null);

@@ -29,6 +29,8 @@ public partial class MainWindow : Window
     private int _lastCommunityCount;
     private int _lastHeistNumber;
     private readonly HashSet<Guid> _visibleHands = [];
+    // Le curseur est rendu depuis une ressource PNG embarquée, sans dépendance à un fichier voisin.
+    private readonly Cursor _gloveCursor;
     // Les dimensions du tableau peuvent être masquées pour agrandir le tapis.
     private bool _historyVisible = true;
     // La géométrie de la fenêtre est restaurée en quittant le plein écran.
@@ -40,8 +42,25 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _gloveCursor = GameCursor.Create();
         _refreshTimer.Tick += RefreshTimer_Tick;
         _noticeTimer.Tick += (_, _) => HideNotice();
+        _heistOutcomeTimer.Tick += (_, _) => HideHeistOutcome();
+        _roundTransitionTimer.Tick += (_, _) => HideRoundTransition();
+        _dragHeartbeatTimer.Tick += (_, _) => PublishDragPosition();
+    }
+
+    /// <summary>Affiche le gant dans le jeu actif et libère le curseur système en dehors.</summary>
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        Mouse.OverrideCursor = _gloveCursor;
+    }
+
+    protected override void OnDeactivated(EventArgs e)
+    {
+        if (Mouse.OverrideCursor == _gloveCursor) Mouse.OverrideCursor = null;
+        base.OnDeactivated(e);
     }
 
     /// <summary>Ouvre les champs de création sans démarrer encore de serveur.</summary>
@@ -110,6 +129,11 @@ public partial class MainWindow : Window
             SettingsOverlay.Visibility = Visibility.Collapsed;
             e.Handled = true;
         }
+        else if (e.Key == Key.Escape && HeistOutcomeOverlay.Visibility == Visibility.Visible)
+        {
+            HideHeistOutcome();
+            e.Handled = true;
+        }
         else if (e.Key == Key.Escape && _isFullScreen)
         {
             SetFullScreen(false);
@@ -171,6 +195,8 @@ public partial class MainWindow : Window
         _lastLobbyStatus = LobbyStatus.Open;
         _lastRenderedPhase = null;
         _lastHeistNumber = 0;
+        _lastSeenEventSequence = 0;
+        _refreshTimer.Interval = TimeSpan.FromSeconds(2);
         _refreshTimer.Start();
         _ = RefreshAsync();
     }
@@ -219,7 +245,7 @@ public partial class MainWindow : Window
     /// <summary>Revient au menu si l'hôte ferme son application ou perd le tunnel.</summary>
     private async Task RefreshAsync()
     {
-        if (_refreshing || _session is null) return;
+        if (_refreshing || _session is null || _busy || _draggedTokenValue is not null) return;
         var session = _session;
         _refreshing = true;
         try
@@ -235,7 +261,8 @@ public partial class MainWindow : Window
             if (lobby.Status == LobbyStatus.Started)
             {
                 var game = await session.Client.GetGameAsync();
-                if (_session != session) return;
+                if (_session != session || _busy || _draggedTokenValue is not null) return;
+                if (game.RecentEvents.LastOrDefault()?.Sequence < _lastSeenEventSequence) return;
                 RenderGame(game);
             }
             if (_connectionWarning)
@@ -266,38 +293,58 @@ public partial class MainWindow : Window
         if (_session?.Client.Identity is not { } identity) return;
         LobbyPanel.Visibility = Visibility.Collapsed;
         GamePanel.Visibility = Visibility.Visible;
+        _refreshTimer.Interval = TimeSpan.FromMilliseconds(500);
         if (game.HeistNumber != _lastHeistNumber)
         {
+            HideHeistOutcome();
+            HideRoundTransition();
             _lastHeistNumber = game.HeistNumber;
             _lastCommunityCount = 0;
+            CommunityCardsPanel.Children.Clear();
             _visibleHands.Clear();
+            ChipFlightCanvas.Children.Clear();
+            _remoteDragVisuals.Clear();
         }
 
         GamePhaseText.Text = PhaseLabel(game);
         GameScoreText.Text = $"Braquage {game.HeistNumber}   ·   {game.SuccessfulHeists} réussis / {game.FailedHeists} ratés";
         TablePhaseText.Text = TableMessage(game);
-        if (_lastRenderedPhase != game.Phase)
+        var phaseChanged = _lastRenderedPhase != game.Phase;
+        if (phaseChanged)
         {
             TableVisuals.Reveal(GamePhaseText);
             _lastRenderedPhase = game.Phase;
         }
 
         RenderCommunityCards(game);
+        _visibleTokenSources.Clear();
         RenderSeats(game, identity.PlayerId, identity.Lobby.HostId);
+        RenderTokenBank(game, phaseChanged);
+        RenderRemoteDrags(game, identity.PlayerId);
         RenderHistory(game);
+        RenderActivity(game);
         RenderControls(game, identity.PlayerId);
+        ProcessGameEvents(game);
     }
 
-    /// <summary>Montre cinq emplacements et anime les cartes communes nouvellement révélées.</summary>
+    /// <summary>Conserve les cartes déjà rendues et retourne seulement les nouvelles, dans l'ordre.</summary>
     private void RenderCommunityCards(GameSnapshot game)
     {
-        CommunityCardsPanel.Children.Clear();
-        for (var index = 0; index < 5; index++)
+        if (CommunityCardsPanel.Children.Count != 5 || game.CommunityCards.Count < _lastCommunityCount)
         {
-            var card = TableVisuals.Card(index < game.CommunityCards.Count ? game.CommunityCards[index] : null, 74, 105);
-            CommunityCardsPanel.Children.Add(card);
-            if (index >= _lastCommunityCount && index < game.CommunityCards.Count)
-                TableVisuals.Reveal(card);
+            CommunityCardsPanel.Children.Clear();
+            for (var index = 0; index < 5; index++)
+                CommunityCardsPanel.Children.Add(TableVisuals.Card(null, 74, 105));
+            _lastCommunityCount = 0;
+        }
+
+        var firstNewCard = _lastCommunityCount;
+        for (var index = firstNewCard; index < game.CommunityCards.Count; index++)
+        {
+            var delay = TimeSpan.FromMilliseconds((index - firstNewCard) * 240);
+            var revealed = TableVisuals.FlipCard(game.CommunityCards[index], 74, 105, delay);
+            CommunityCardsPanel.Children.RemoveAt(index);
+            CommunityCardsPanel.Children.Insert(index, revealed);
         }
         _lastCommunityCount = game.CommunityCards.Count;
     }
@@ -306,6 +353,8 @@ public partial class MainWindow : Window
     private void RenderSeats(GameSnapshot game, Guid selfId, Guid hostId)
     {
         SeatsCanvas.Children.Clear();
+        _seatCenters.Clear();
+        _selfSeat = null;
         var players = game.Players.ToArray();
         var selfIndex = Array.FindIndex(players, player => player.Id == selfId);
         if (selfIndex < 0) return;
@@ -322,10 +371,17 @@ public partial class MainWindow : Window
         {
             var wasVisible = _visibleHands.Contains(player.Id);
             var seat = TableVisuals.Seat(player, isSelf, player.Id == hostId,
-                player.Id == game.NextPlayerToRevealId, TableVisuals.RoundColor(game.Phase));
+                player.Id == game.NextPlayerToRevealId, TableVisuals.RoundColor(game.Phase),
+                (chip, value) =>
+                {
+                    _visibleTokenSources[value] = chip;
+                    EnableChipDrag(chip, value, player.Id, game.Phase, !game.AllChoicesConfirmed);
+                });
             Canvas.SetLeft(seat, position.X);
             Canvas.SetTop(seat, position.Y);
             SeatsCanvas.Children.Add(seat);
+            _seatCenters[player.Id] = new Point(position.X + seat.Width / 2, position.Y + seat.Height / 2);
+            if (isSelf) _selfSeat = seat;
             if (player.Hand.Count == 2 && !wasVisible && !isSelf)
                 TableVisuals.Reveal(seat);
             if (player.Hand.Count == 2) _visibleHands.Add(player.Id);
@@ -400,10 +456,6 @@ public partial class MainWindow : Window
         var choosing = game.Phase is GamePhase.PreFlop or GamePhase.Flop or GamePhase.Turn or GamePhase.River;
         var self = game.Players.First(player => player.Id == selfId);
         TokenActions.Visibility = choosing ? Visibility.Visible : Visibility.Collapsed;
-        var selected = TokenBox.SelectedItem is int previous ? previous : self.CurrentToken ?? 1;
-        TokenBox.ItemsSource = Enumerable.Range(1, game.Players.Count).ToArray();
-        TokenBox.SelectedItem = Math.Clamp(selected, 1, game.Players.Count);
-        TakeTokenButton.IsEnabled = choosing && !game.AllChoicesConfirmed;
         ReturnTokenButton.IsEnabled = choosing && self.CurrentToken.HasValue && !game.AllChoicesConfirmed;
         ConfirmButton.IsEnabled = choosing && game.AllPlayersHaveTokens && !self.IsChoiceConfirmed;
         WithdrawButton.IsEnabled = choosing && self.IsChoiceConfirmed;
@@ -449,25 +501,30 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Transmet une commande à l'hôte puis affiche le nouvel état autorisé.</summary>
-    private async Task ApplyAsync(GameAction action, int? tokenValue = null)
+    private async Task ApplyAsync(GameAction action, int? tokenValue = null, Guid? gestureId = null)
     {
         var session = _session!;
-        var game = await session.Client.ApplyAsync(new GameActionRequest(action, tokenValue));
+        var game = await session.Client.ApplyAsync(new GameActionRequest(action, tokenValue, gestureId));
         if (_session == session) RenderGame(game);
     }
 
-    private async void TakeToken_Click(object sender, RoutedEventArgs e) => await RunAsync(() =>
-        ApplyAsync(GameAction.TakeToken, (int?)TokenBox.SelectedItem));
-    private async void ReturnToken_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyAsync(GameAction.ReturnToken));
-    private async void Confirm_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyAsync(GameAction.ConfirmChoice));
-    private async void Withdraw_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyAsync(GameAction.WithdrawConfirmation));
-    private async void Advance_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyAsync(GameAction.AdvanceRound));
-    private async void Reveal_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyAsync(GameAction.RevealNextHand));
-    private async void Resolve_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyAsync(GameAction.ResolveHeist));
-    private async void NextHeist_Click(object sender, RoutedEventArgs e) => await RunAsync(() => ApplyAsync(GameAction.StartNextHeist));
+    private async void ReturnToken_Click(object sender, RoutedEventArgs e) =>
+        await RunAsync(() => ApplyAsync(GameAction.ReturnToken), showProgress: false);
+    private async void Confirm_Click(object sender, RoutedEventArgs e) =>
+        await RunAsync(() => ApplyAsync(GameAction.ConfirmChoice), showProgress: false);
+    private async void Withdraw_Click(object sender, RoutedEventArgs e) =>
+        await RunAsync(() => ApplyAsync(GameAction.WithdrawConfirmation), showProgress: false);
+    private async void Advance_Click(object sender, RoutedEventArgs e) =>
+        await RunAsync(() => ApplyAsync(GameAction.AdvanceRound), showProgress: false);
+    private async void Reveal_Click(object sender, RoutedEventArgs e) =>
+        await RunAsync(() => ApplyAsync(GameAction.RevealNextHand), showProgress: false);
+    private async void Resolve_Click(object sender, RoutedEventArgs e) =>
+        await RunAsync(() => ApplyAsync(GameAction.ResolveHeist), showProgress: false);
+    private async void NextHeist_Click(object sender, RoutedEventArgs e) =>
+        await RunAsync(() => ApplyAsync(GameAction.StartNextHeist), showProgress: false);
 
     /// <summary>Exécute une action UI unique et affiche une erreur courte si elle échoue.</summary>
-    private async Task RunAsync(Func<Task> operation)
+    private async Task RunAsync(Func<Task> operation, bool showProgress = true)
     {
         if (_busy) return;
         _busy = true;
@@ -475,7 +532,7 @@ public partial class MainWindow : Window
         try
         {
             _connectionWarning = false;
-            ShowNotice("Action en cours…", autoHide: false);
+            if (showProgress) ShowNotice("Action en cours…", autoHide: false);
             await operation();
             if (StatusText.Text == "Action en cours…") HideNotice();
         }
@@ -506,16 +563,27 @@ public partial class MainWindow : Window
     /// <summary>Nettoie les informations de la partie et réaffiche l'accueil.</summary>
     private async Task ReturnToMenuAsync(string message)
     {
+        if (_draggedTokenValue is not null) EndChipDrag();
+        HideHeistOutcome();
+        HideRoundTransition();
         await CloseSessionAsync();
         MenuPanel.Visibility = Visibility.Visible;
         EntryPanel.Visibility = LobbyPanel.Visibility = GamePanel.Visibility = Visibility.Collapsed;
         PlayersList.ItemsSource = null;
         SeatsCanvas.Children.Clear();
         CommunityCardsPanel.Children.Clear();
+        TokenBankPanel.Children.Clear();
+        ChipFlightCanvas.Children.Clear();
         HistoryRowsPanel.Children.Clear();
+        ActivityRowsPanel.Children.Clear();
+        _remoteDragVisuals.Clear();
+        _seatCenters.Clear();
+        _bankCenters.Clear();
+        _visibleTokenSources.Clear();
         _lastLobbyStatus = LobbyStatus.Open;
         _lastRenderedPhase = null;
         _lastHeistNumber = _lastCommunityCount = 0;
+        _lastSeenEventSequence = 0;
         _visibleHands.Clear();
         _connectionWarning = false;
         if (string.IsNullOrWhiteSpace(message)) HideNotice();
@@ -560,8 +628,12 @@ public partial class MainWindow : Window
     /// <summary>Notifie le serveur du départ avant de fermer l'application.</summary>
     protected override void OnClosed(EventArgs e)
     {
+        if (Mouse.OverrideCursor == _gloveCursor) Mouse.OverrideCursor = null;
         _refreshTimer.Stop();
+        _dragHeartbeatTimer.Stop();
         _noticeTimer.Stop();
+        _heistOutcomeTimer.Stop();
+        _roundTransitionTimer.Stop();
         var session = _session;
         _session = null;
         if (session is not null)

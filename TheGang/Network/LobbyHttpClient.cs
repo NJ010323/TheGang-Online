@@ -56,6 +56,10 @@ public sealed class LobbyHttpClient : IDisposable
         CancellationToken cancellationToken = default) =>
         await PostAsync<GameSnapshot>($"lobbies/{Code}/game/actions", cancellationToken, action);
 
+    /// <summary>Publie la position du jeton tenu sans modifier la partie.</summary>
+    public async Task UpdateDragAsync(GameDragRequest drag, CancellationToken cancellationToken = default) =>
+        await PostAsync<bool>($"lobbies/{Code}/game/drag", cancellationToken, drag);
+
     /// <summary>Quitte le lobby ; une partie démarrée est fermée pour tous.</summary>
     public async Task LeaveAsync(CancellationToken cancellationToken = default)
     {

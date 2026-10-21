@@ -105,6 +105,43 @@ internal static class TableVisuals
         };
     }
 
+    /// <summary>Retourne une carte commune de dos vers sa face après un délai, sans reconstruire le plateau.</summary>
+    public static FrameworkElement FlipCard(CardSnapshot card, double width, double height, TimeSpan delay)
+    {
+        if (!AnimationsEnabled) return Card(card, width, height);
+
+        var back = Card(null, width, height);
+        var face = Card(card, width, height);
+        face.Visibility = Visibility.Collapsed;
+        var holder = new Grid
+        {
+            Width = width + 6,
+            Height = height + 6,
+            RenderTransformOrigin = new Point(0.5, 0.5),
+            RenderTransform = new ScaleTransform()
+        };
+        holder.Children.Add(back);
+        holder.Children.Add(face);
+        var scale = (ScaleTransform)holder.RenderTransform;
+        var close = new DoubleAnimation(1, 0.04, TimeSpan.FromMilliseconds(190))
+        {
+            BeginTime = delay,
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+        };
+        close.Completed += (_, _) =>
+        {
+            back.Visibility = Visibility.Collapsed;
+            face.Visibility = Visibility.Visible;
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty,
+                new DoubleAnimation(0.04, 1, TimeSpan.FromMilliseconds(230))
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                });
+        };
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, close);
+        return holder;
+    }
+
     /// <summary>Dessine un jeton lisible même après réduction du plateau.</summary>
     public static FrameworkElement Chip(int value, TokenColors color, double size = 42)
     {
@@ -130,7 +167,8 @@ internal static class TableVisuals
 
     /// <summary>Construit une place avec nom, deux cartes, jeton et état de confirmation.</summary>
     public static Border Seat(PlayerSnapshot player, bool isSelf, bool isHost,
-        bool isNextToReveal, TokenColors roundColor)
+        bool isNextToReveal, TokenColors roundColor,
+        Action<FrameworkElement, int>? onTokenCreated = null)
     {
         var frame = new Border
         {
@@ -157,7 +195,11 @@ internal static class TableVisuals
         for (var index = 0; index < 2; index++)
             cardRow.Children.Add(Card(player.Hand.Count > index ? player.Hand[index] : null, 46, 66));
         if (player.CurrentToken is { } token)
-            cardRow.Children.Add(Chip(token, roundColor, 40));
+        {
+            var tokenVisual = Chip(token, roundColor, 40);
+            cardRow.Children.Add(tokenVisual);
+            onTokenCreated?.Invoke(tokenVisual, token);
+        }
         content.Children.Add(cardRow);
         content.Children.Add(new TextBlock
         {

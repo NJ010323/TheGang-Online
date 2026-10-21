@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="The Gang" Width="1440" Height="900" MinWidth="960" MinHeight="680"
         WindowStartupLocation="CenterScreen" Background="#0D0909" Foreground="#F8EDD9"
-        KeyDown="Window_KeyDown">
+        KeyDown="Window_KeyDown" MouseMove="Window_MouseMove"
+        MouseLeftButtonUp="Window_MouseLeftButtonUp" LostMouseCapture="Window_LostMouseCapture">
     <Window.Resources>
         <Style x:Key="ActionButton" TargetType="Button">
             <Setter Property="Background" Value="#E5B958" />
@@ -286,7 +287,48 @@
                                         Canvas.Left="425" Canvas.Top="318" />
                             <TextBlock x:Name="TablePhaseText" Foreground="#E6C37D" FontSize="18"
                                        TextAlignment="Center" Width="560" Canvas.Left="360" Canvas.Top="442" />
+                            <TextBlock x:Name="TokenBankTitle" Text="JETONS DU TOUR · GLISSEZ VERS VOTRE MAIN"
+                                       Foreground="#E8C879" FontSize="13" FontWeight="Bold"
+                                       Width="600" TextAlignment="Center" Canvas.Left="340" Canvas.Top="482" />
+                            <StackPanel x:Name="TokenBankPanel" Orientation="Horizontal"
+                                        Canvas.Top="506" />
                             <Canvas x:Name="SeatsCanvas" Width="1280" Height="720" />
+                            <Canvas x:Name="ChipFlightCanvas" Width="1280" Height="720"
+                                    IsHitTestVisible="False" />
+                            <!-- L'annonce de phase reste sur le tapis pendant le retournement des cartes. -->
+                            <Grid x:Name="RoundTransitionOverlay" Width="1280" Height="720"
+                                  Visibility="Collapsed" IsHitTestVisible="False"
+                                  Background="#760B0709">
+                                <Border x:Name="RoundTransitionCard" Width="575" Padding="30,23"
+                                        Background="#F21B1114" BorderBrush="#E5B958"
+                                        BorderThickness="2" CornerRadius="17"
+                                        HorizontalAlignment="Center" VerticalAlignment="Top"
+                                        Margin="0,100,0,0" RenderTransformOrigin="0.5,0.5">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform x:Name="RoundTransitionScale" />
+                                    </Border.RenderTransform>
+                                    <StackPanel>
+                                        <TextBlock x:Name="RoundTransitionEyebrow" Text="TOUR TERMINÉ"
+                                                   TextAlignment="Center" Foreground="#D7B97A"
+                                                   FontSize="17" FontWeight="Bold" />
+                                        <TextBlock x:Name="RoundTransitionTitle" TextAlignment="Center"
+                                                   FontFamily="Georgia" FontSize="31" FontWeight="Bold"
+                                                   Foreground="#F6D17C" Margin="0,9,0,7" />
+                                        <TextBlock x:Name="RoundTransitionDetail" TextAlignment="Center"
+                                                   Foreground="#F0DFC6" FontSize="18" />
+                                        <Border Height="5" Background="#594B372B" CornerRadius="3"
+                                                Margin="0,20,0,0">
+                                            <Border x:Name="RoundTransitionProgress" Background="#E5B958"
+                                                    CornerRadius="3" HorizontalAlignment="Stretch"
+                                                    RenderTransformOrigin="0,0.5">
+                                                <Border.RenderTransform>
+                                                    <ScaleTransform x:Name="RoundTransitionProgressScale" />
+                                                </Border.RenderTransform>
+                                            </Border>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
                         </Canvas>
                     </Viewbox>
                 </Border>
@@ -299,6 +341,14 @@
                             <TextBlock Text="Choix de chaque joueur, tour par tour"
                                        Foreground="#BBAE9C" FontSize="12" Margin="0,5,0,0" />
                         </StackPanel>
+                        <Border DockPanel.Dock="Bottom" BorderBrush="#725636" BorderThickness="0,1,0,0"
+                                Padding="0,12,0,0" Margin="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock Text="ACTIONS RÉCENTES" FontSize="13" FontWeight="Bold"
+                                           Foreground="#F0C86A" Margin="0,0,0,8" />
+                                <StackPanel x:Name="ActivityRowsPanel" />
+                            </StackPanel>
+                        </Border>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel x:Name="HistoryRowsPanel" />
                         </ScrollViewer>
@@ -309,11 +359,9 @@
                     Padding="18,12,18,8">
                 <StackPanel>
                     <WrapPanel x:Name="TokenActions" HorizontalAlignment="Center">
-                        <TextBlock Text="MON JETON" Foreground="#E9C575" VerticalAlignment="Center"
-                                   FontWeight="Bold" Margin="0,0,10,8" />
-                        <ComboBox x:Name="TokenBox" Width="64" Height="37" Margin="0,0,10,8" FontSize="16" />
-                        <Button x:Name="TakeTokenButton" Content="Prendre / échanger" Style="{StaticResource ActionButton}"
-                                Click="TakeToken_Click" />
+                        <TextBlock Text="Glissez un jeton du centre ou d'une autre main vers la vôtre."
+                                   Foreground="#E9C575" VerticalAlignment="Center"
+                                   FontWeight="SemiBold" Margin="0,0,18,8" />
                         <Button x:Name="ReturnTokenButton" Content="Rendre" Style="{StaticResource QuietButton}"
                                 Click="ReturnToken_Click" />
                         <Button x:Name="ConfirmButton" Content="Confirmer mon choix" Style="{StaticResource ActionButton}"
@@ -376,7 +424,7 @@
         <Border x:Name="NoticeBanner" Grid.RowSpan="2" Panel.ZIndex="30" Visibility="Collapsed"
                 Background="#F3231B18" BorderBrush="#E5B958" BorderThickness="1.5"
                 CornerRadius="11" Padding="18,13" MinWidth="420" MaxWidth="760"
-                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,88,0,0">
+                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,160,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="36" />
@@ -393,5 +441,49 @@
                         AutomationProperties.Name="Fermer le message" Click="NoticeClose_Click" />
             </Grid>
         </Border>
+
+        <!-- Résultat partagé par tous les joueurs après la résolution du braquage. -->
+        <Grid x:Name="HeistOutcomeOverlay" Grid.RowSpan="2" Panel.ZIndex="40"
+              Visibility="Collapsed" Background="#E8080708">
+            <Border x:Name="OutcomeCard" Width="600" MaxHeight="760" Padding="35,24"
+                    Background="#F0181112" BorderBrush="#E5B958" BorderThickness="2"
+                    CornerRadius="18" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <ScaleTransform x:Name="OutcomeScale" ScaleX="1" ScaleY="1" />
+                </Border.RenderTransform>
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock x:Name="OutcomeEyebrow" Text="BRAQUAGE" TextAlignment="Center"
+                               FontSize="15" FontWeight="Bold" Foreground="#D7BA76" />
+                    <TextBlock x:Name="OutcomeTitle" TextAlignment="Center" Margin="0,9,0,6"
+                               FontFamily="Georgia" FontSize="35" FontWeight="Bold"
+                               Foreground="#F4D17D" />
+                    <TextBlock x:Name="OutcomeSubtitle" TextAlignment="Center" TextWrapping="Wrap"
+                               MaxWidth="500" FontSize="16" Foreground="#E9D9BF" />
+                    <Grid Width="370" Height="350" Margin="0,3,0,0">
+                        <Ellipse x:Name="OutcomeGlow" Width="320" Height="290" Opacity="0"
+                                 Fill="#A8E9AF3F" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Ellipse.Effect>
+                                <BlurEffect Radius="85" />
+                            </Ellipse.Effect>
+                        </Ellipse>
+                        <Image x:Name="OutcomeClosedImage" Source="Assets/vault-closed.png"
+                               Width="340" Height="340" Stretch="Uniform"
+                               RenderTransformOrigin="0.5,0.5">
+                            <Image.RenderTransform>
+                                <TranslateTransform x:Name="OutcomeVaultShake" />
+                            </Image.RenderTransform>
+                        </Image>
+                        <Image x:Name="OutcomeOpenImage" Source="Assets/vault-open.png"
+                               Width="340" Height="340" Stretch="Uniform" Opacity="0" />
+                    </Grid>
+                    <TextBlock x:Name="OutcomeScore" TextAlignment="Center" FontSize="15"
+                               Foreground="#CBBDA8" Margin="0,0,0,18" />
+                    <Button Content="Continuer" AutomationProperties.Name="Fermer le résultat du braquage"
+                            Style="{StaticResource ActionButton}" Width="200" Margin="0"
+                            HorizontalAlignment="Center" Click="CloseHeistOutcome_Click" />
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>
