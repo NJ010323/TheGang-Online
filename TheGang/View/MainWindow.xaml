@@ -37,6 +37,86 @@
             <Setter Property="Background" Value="#332A25" />
             <Setter Property="Foreground" Value="#F6E9CF" />
         </Style>
+        <!-- Commandes du plateau : même cadre art déco, couleurs distinctes selon l'action. -->
+        <Style x:Key="TableButton" TargetType="Button">
+            <Setter Property="Background" Value="#302326" />
+            <Setter Property="BorderBrush" Value="#A98557" />
+            <Setter Property="Foreground" Value="#F8EBD4" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="MinHeight" Value="42" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonShell" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1.5"
+                                CornerRadius="9" SnapsToDevicePixels="True">
+                            <Grid>
+                                <Border x:Name="HoverWash" Background="#88FFF2D6"
+                                        CornerRadius="8" Opacity="0" />
+                                <Border Height="1" Margin="10,3,10,0" VerticalAlignment="Top"
+                                        Background="#7EFFE9AD" />
+                                <Border Height="1" Margin="10,0,10,3" VerticalAlignment="Bottom"
+                                        Background="#85200E12" />
+                                <Grid Margin="{TemplateBinding Padding}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="◆" FontSize="7" Opacity="0.7" Margin="0,0,8,0"
+                                               Foreground="{TemplateBinding Foreground}"
+                                               VerticalAlignment="Center" />
+                                    <ContentPresenter Grid.Column="1" HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center" RecognizesAccessKey="True" />
+                                    <TextBlock Grid.Column="2" Text="◆" FontSize="7" Opacity="0.7"
+                                               Margin="8,0,0,0" Foreground="{TemplateBinding Foreground}"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="HoverWash" Property="Opacity" Value="0.24" />
+                                <Setter TargetName="ButtonShell" Property="BorderBrush" Value="#FFE3A3" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="HoverWash" Property="Opacity" Value="0.42" />
+                                <Setter TargetName="ButtonShell" Property="BorderThickness" Value="2.5" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="ButtonShell" Property="BorderBrush" Value="White" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonShell" Property="Opacity" Value="0.48" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="TableActionButton" TargetType="Button" BasedOn="{StaticResource TableButton}">
+            <Setter Property="Foreground" Value="#29160F" />
+            <Setter Property="BorderBrush" Value="#FFE2A0" />
+            <Setter Property="Background">
+                <Setter.Value>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#F7DB91" Offset="0" />
+                        <GradientStop Color="#D9A34D" Offset="0.56" />
+                        <GradientStop Color="#B98339" Offset="1" />
+                    </LinearGradientBrush>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="TableDangerButton" TargetType="Button" BasedOn="{StaticResource TableButton}">
+            <Setter Property="Foreground" Value="#F7D4CA" />
+            <Setter Property="BorderBrush" Value="#B66B61" />
+            <Setter Property="Background" Value="#4A2024" />
+        </Style>
         <Style x:Key="EntryBox" TargetType="TextBox">
             <Setter Property="Background" Value="#1B1414" />
             <Setter Property="Foreground" Value="#FFF4DF" />
@@ -116,11 +196,14 @@
             </Grid.ColumnDefinitions>
             <Image Source="Assets/logo-reference.png" Width="184" Height="58" Stretch="None"
                    HorizontalAlignment="Left" VerticalAlignment="Center" Margin="16,0,0,0" />
-            <TextBlock Grid.Column="1" Text="LE JEU DE POKER COOPÉRATIF" Foreground="#D3B573"
-                       FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
-                       HorizontalAlignment="Center" />
+            <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="POKER COOPÉRATIF  ·  BRAQUAGE EN ÉQUIPE" Foreground="#F1C975"
+                           FontSize="14" FontWeight="Bold" TextAlignment="Center" />
+                <TextBlock Text="Trois cartes d'or pour ouvrir le coffre" Foreground="#BBAA8E"
+                           FontSize="11" TextAlignment="Center" Margin="0,4,0,0" />
+            </StackPanel>
             <Button Grid.Column="2" Content="⚙  Paramètres" AutomationProperties.Name="Ouvrir les paramètres"
-                    Style="{StaticResource QuietButton}" Margin="0,12,18,2" Click="Settings_Click" />
+                    Style="{StaticResource TableButton}" Margin="0,12,18,2" Click="Settings_Click" />
         </Grid>
 
         <!-- Menu principal. -->
@@ -250,25 +333,37 @@
         <!-- Plateau et tableau des choix. -->
         <Grid x:Name="GamePanel" Grid.Row="1" Visibility="Collapsed" Background="#100A0B">
             <Grid.RowDefinitions>
-                <RowDefinition Height="72" />
+                <RowDefinition Height="84" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <Grid Grid.Row="0" Margin="22,8,22,0">
+            <Grid Grid.Row="0" Margin="22,4,22,0">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="255" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock x:Name="GamePhaseText" FontSize="24" FontFamily="Georgia" FontWeight="Bold"
-                               Foreground="#F0C86A" VerticalAlignment="Center" />
-                    <TextBlock x:Name="GameScoreText" FontSize="15" Foreground="#D4C6B4"
-                               VerticalAlignment="Center" Margin="24,0,0,0" />
+                <TextBlock x:Name="GamePhaseText" FontSize="21" FontFamily="Georgia" FontWeight="Bold"
+                           Foreground="#F0C86A" VerticalAlignment="Center" TextWrapping="Wrap" />
+                <!-- Trois cartes d'or et trois cartes d'alarme, toutes face cachée au départ. -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <StackPanel Margin="0,0,10,0">
+                        <TextBlock x:Name="GoldCountText" Text="OR  0/3" Foreground="#F4CF74"
+                                   FontSize="12" FontWeight="Bold" TextAlignment="Center" />
+                        <StackPanel x:Name="GoldResultCardsPanel" Orientation="Horizontal" />
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock x:Name="AlarmCountText" Text="ALARMES  0/3" Foreground="#F08075"
+                                   FontSize="12" FontWeight="Bold" TextAlignment="Center" />
+                        <StackPanel x:Name="AlarmResultCardsPanel" Orientation="Horizontal" />
+                    </StackPanel>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="HistoryToggleButton" Content="Masquer le tableau"
-                            Style="{StaticResource QuietButton}" Click="HistoryToggle_Click" />
-                    <Button Content="Quitter la partie" Style="{StaticResource QuietButton}"
+                            Style="{StaticResource TableButton}" Margin="0,0,8,0"
+                            Click="HistoryToggle_Click" />
+                    <Button Content="Quitter la partie" Style="{StaticResource TableDangerButton}"
                             Click="ExitGame_Click" />
                 </StackPanel>
             </Grid>
@@ -293,6 +388,52 @@
                             <StackPanel x:Name="TokenBankPanel" Orientation="Horizontal"
                                         Canvas.Top="506" />
                             <Canvas x:Name="SeatsCanvas" Width="1280" Height="720" />
+                            <!-- Carte d'aide conservée à côté de la main du joueur local. -->
+                            <Button x:Name="RulesCardButton" Canvas.Left="778" Canvas.Top="550"
+                                    Width="128" Height="140" Cursor="Hand"
+                                    AutomationProperties.Name="Agrandir la carte des règles"
+                                    Click="OpenRulesCard_Click">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="RulesFrame" CornerRadius="8" Background="#D6AC61"
+                                                BorderBrush="#FFDB89" BorderThickness="2" Padding="3">
+                                            <Border x:Name="RulesInset" CornerRadius="4" Background="#F4E7D0"
+                                                    BorderBrush="#904B32" BorderThickness="1" Padding="5">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center" />
+                                            </Border>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="RulesFrame" Property="BorderBrush" Value="White" />
+                                                <Setter TargetName="RulesInset" Property="Background" Value="#FFF2D9" />
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="RulesFrame" Property="BorderBrush" Value="White" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                                <StackPanel Width="106">
+                                    <TextBlock Text="✦  AIDE DE JEU  ✦" Foreground="#75322B" FontSize="11"
+                                               FontWeight="Bold" TextAlignment="Center" />
+                                    <Grid Height="56" Margin="0,2,0,1">
+                                        <TextBlock Text="♠" Foreground="#251F26" FontSize="48"
+                                                   TextAlignment="Center" VerticalAlignment="Center" />
+                                        <TextBlock Text="♥" Foreground="#B82432" FontSize="22"
+                                                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                   Margin="0,0,18,1" />
+                                    </Grid>
+                                    <TextBlock Text="10 COMBINAISONS" Foreground="#3D2924" FontSize="10"
+                                               FontWeight="Bold" TextAlignment="Center" />
+                                    <Border Height="22" Background="#69342B" CornerRadius="2"
+                                            Margin="0,5,0,0">
+                                        <TextBlock Text="AGRANDIR  ↗" Foreground="#FFE9C9" FontSize="10"
+                                                   FontWeight="Bold" TextAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+                                </StackPanel>
+                            </Button>
                             <Canvas x:Name="ChipFlightCanvas" Width="1280" Height="720"
                                     IsHitTestVisible="False" />
                             <!-- L'annonce de phase reste sur le tapis pendant le retournement des cartes. -->
@@ -355,31 +496,52 @@
                     </DockPanel>
                 </Border>
             </Grid>
-            <Border Grid.Row="2" Background="#211515" BorderBrush="#665032" BorderThickness="0,1,0,0"
-                    Padding="18,12,18,8">
-                <StackPanel>
-                    <WrapPanel x:Name="TokenActions" HorizontalAlignment="Center">
-                        <TextBlock Text="Glissez un jeton du centre ou d'une autre main vers la vôtre."
+            <Border Grid.Row="2" Height="116" Background="#211515" BorderBrush="#665032"
+                    BorderThickness="0,1,0,0" Padding="18,8">
+                <!-- Les deux rangées gardent la même hauteur pour l'hôte et les invités. -->
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="49" />
+                        <RowDefinition Height="49" />
+                    </Grid.RowDefinitions>
+                    <Grid x:Name="TokenActions" Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="GLISSEZ UN JETON VERS VOTRE MAIN"
                                    Foreground="#E9C575" VerticalAlignment="Center"
-                                   FontWeight="SemiBold" Margin="0,0,18,8" />
-                        <Button x:Name="ReturnTokenButton" Content="Rendre" Style="{StaticResource QuietButton}"
+                                   FontSize="12" FontWeight="Bold" TextWrapping="Wrap"
+                                   Margin="0,0,12,0" />
+                        <Button x:Name="ReturnTokenButton" Grid.Column="1" Content="Rendre"
+                                Style="{StaticResource TableButton}" Margin="0,3,7,3"
                                 Click="ReturnToken_Click" />
-                        <Button x:Name="ConfirmButton" Content="Confirmer mon choix" Style="{StaticResource ActionButton}"
+                        <Button x:Name="ConfirmButton" Grid.Column="2" Content="Confirmer mon choix"
+                                Style="{StaticResource TableActionButton}" Margin="0,3,7,3"
                                 Click="Confirm_Click" />
-                        <Button x:Name="WithdrawButton" Content="Retirer ma confirmation"
-                                Style="{StaticResource QuietButton}" Click="Withdraw_Click" />
-                    </WrapPanel>
-                    <WrapPanel x:Name="HostActions" HorizontalAlignment="Center">
-                        <Button x:Name="AdvanceButton" Content="Révéler le tour suivant" Style="{StaticResource ActionButton}"
-                                Click="Advance_Click" />
-                        <Button x:Name="RevealButton" Content="Révéler la prochaine main" Style="{StaticResource ActionButton}"
-                                Click="Reveal_Click" />
-                        <Button x:Name="ResolveButton" Content="Résoudre le braquage" Style="{StaticResource ActionButton}"
-                                Click="Resolve_Click" />
-                        <Button x:Name="NextHeistButton" Content="Braquage suivant" Style="{StaticResource ActionButton}"
-                                Click="NextHeist_Click" />
-                    </WrapPanel>
-                </StackPanel>
+                        <Button x:Name="WithdrawButton" Grid.Column="3" Content="Retirer ma confirmation"
+                                Style="{StaticResource TableButton}" Margin="0,3,0,3"
+                                Click="Withdraw_Click" />
+                    </Grid>
+                    <TextBlock x:Name="FooterPhaseHint" Grid.Row="0" TextAlignment="Center"
+                               Foreground="#E9D5AE" FontSize="14" VerticalAlignment="Center"
+                               Visibility="Collapsed" />
+                    <TextBlock x:Name="FooterHostHint" Grid.Row="1" TextAlignment="Center"
+                               Foreground="#BAA68B" FontSize="13" VerticalAlignment="Center" />
+                    <StackPanel x:Name="HostActions" Grid.Row="1" Orientation="Horizontal"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Button x:Name="AdvanceButton" Content="Révéler le tour suivant"
+                                Style="{StaticResource TableActionButton}" Margin="0,2,0,2" Click="Advance_Click" />
+                        <Button x:Name="RevealButton" Content="Révéler la prochaine main"
+                                Style="{StaticResource TableActionButton}" Margin="0,2,0,2" Click="Reveal_Click" />
+                        <Button x:Name="ResolveButton" Content="Résoudre le braquage"
+                                Style="{StaticResource TableActionButton}" Margin="0,2,0,2" Click="Resolve_Click" />
+                        <Button x:Name="NextHeistButton" Content="Braquage suivant"
+                                Style="{StaticResource TableActionButton}" Margin="0,2,0,2" Click="NextHeist_Click" />
+                    </StackPanel>
+                </Grid>
             </Border>
         </Grid>
 
@@ -393,7 +555,7 @@
                     <Grid Margin="0,0,0,22">
                         <TextBlock Text="Paramètres" FontFamily="Georgia" FontWeight="Bold" FontSize="32"
                                    Foreground="#F4CE75" VerticalAlignment="Center" />
-                        <Button Content="Fermer" Style="{StaticResource QuietButton}"
+                        <Button Content="Fermer" Style="{StaticResource TableButton}"
                                 HorizontalAlignment="Right" Margin="0" Click="CloseSettings_Click" />
                     </Grid>
                     <TextBlock Text="AFFICHAGE" Foreground="#F0C86A" FontWeight="Bold" FontSize="14" />
@@ -467,22 +629,94 @@
                                 <BlurEffect Radius="85" />
                             </Ellipse.Effect>
                         </Ellipse>
+                        <Ellipse x:Name="OutcomeAlarmGlow" Width="310" Height="270" Opacity="0"
+                                 Fill="#DDF52925" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Ellipse.Effect>
+                                <BlurEffect Radius="80" />
+                            </Ellipse.Effect>
+                        </Ellipse>
                         <Image x:Name="OutcomeClosedImage" Source="Assets/vault-closed.png"
-                               Width="340" Height="340" Stretch="Uniform"
-                               RenderTransformOrigin="0.5,0.5">
-                            <Image.RenderTransform>
-                                <TranslateTransform x:Name="OutcomeVaultShake" />
-                            </Image.RenderTransform>
-                        </Image>
+                               Width="340" Height="340" Stretch="Uniform" />
                         <Image x:Name="OutcomeOpenImage" Source="Assets/vault-open.png"
                                Width="340" Height="340" Stretch="Uniform" Opacity="0" />
+                        <Image x:Name="OutcomeGoldImage" Width="360" Height="240"
+                               Stretch="Uniform" Visibility="Collapsed" Opacity="0"
+                               RenderTransformOrigin="0.5,0.5">
+                            <Image.RenderTransform>
+                                <ScaleTransform x:Name="OutcomeGoldScale" />
+                            </Image.RenderTransform>
+                        </Image>
+                        <Image x:Name="OutcomeAlarmImage" Width="360" Height="240"
+                               Stretch="Uniform" Visibility="Collapsed" Opacity="0" />
                     </Grid>
                     <TextBlock x:Name="OutcomeScore" TextAlignment="Center" FontSize="15"
                                Foreground="#CBBDA8" Margin="0,0,0,18" />
                     <Button Content="Continuer" AutomationProperties.Name="Fermer le résultat du braquage"
-                            Style="{StaticResource ActionButton}" Width="200" Margin="0"
+                            Style="{StaticResource TableActionButton}" Width="200" Margin="0"
                             HorizontalAlignment="Center" Click="CloseHeistOutcome_Click" />
                 </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Aide illustrée de la partie, ouverte depuis la carte voisine de la main locale. -->
+        <Grid x:Name="RulesOverlay" Grid.RowSpan="2" Panel.ZIndex="50" Visibility="Collapsed"
+              Background="#EC080708">
+            <Border MaxWidth="1120" MaxHeight="760" Margin="24" Padding="24"
+                    Background="#1D1415" BorderBrush="#D5A95C" BorderThickness="2"
+                    CornerRadius="17" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid Margin="0,0,0,14">
+                        <TextBlock Text="CARTE D'AIDE  ·  THE GANG" FontFamily="Georgia"
+                                   FontSize="27" FontWeight="Bold" Foreground="#F5D17B"
+                                   VerticalAlignment="Center" />
+                        <Button Content="Fermer" Style="{StaticResource TableButton}"
+                                HorizontalAlignment="Right" Margin="0"
+                                Click="CloseRulesCard_Click" />
+                    </Grid>
+                    <!-- Le panneau entier se réduit avec la fenêtre : les dix mains restent visibles sans défilement. -->
+                    <Viewbox Grid.Row="1" Stretch="Uniform" StretchDirection="DownOnly">
+                        <Grid Width="1010" Height="620">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="1.15*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Background="#F3E6D1" BorderBrush="#B58C53" BorderThickness="2"
+                                    CornerRadius="10" Padding="18"
+                                    Margin="0,0,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="DÉROULEMENT" Foreground="#3E2721"
+                                               FontSize="22" FontWeight="Bold" FontFamily="Georgia" />
+                                    <TextBlock Text="Classez ensemble vos mains de la plus faible à la plus forte."
+                                               Foreground="#49352A" FontSize="14" TextWrapping="Wrap"
+                                               Margin="0,8,0,14" />
+                                    <StackPanel x:Name="RuleRoundsPanel" />
+                                    <TextBlock Text="RÉVÉLATION" Foreground="#622C24" FontSize="17"
+                                               FontWeight="Bold" Margin="0,16,0,5" />
+                                    <TextBlock Text="Après les jetons rouges, révélez les mains dans l'ordre 1, 2, 3… Une erreur dans le classement déclenche une alarme."
+                                               Foreground="#49352A" TextWrapping="Wrap" FontSize="13" />
+                                    <TextBlock Text="OUVRIR LE COFFRE" Foreground="#622C24" FontSize="17"
+                                               FontWeight="Bold" Margin="0,16,0,5" />
+                                    <TextBlock Text="Retournez trois cartes d'or pour gagner. Trois alarmes mettent fin à la partie."
+                                               Foreground="#49352A" TextWrapping="Wrap" FontSize="13" />
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Background="#F3E6D1" BorderBrush="#B58C53"
+                                    BorderThickness="2" CornerRadius="10" Padding="18" Margin="10,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="CLASSEMENT DES MAINS" Foreground="#3E2721"
+                                               FontSize="22" FontWeight="Bold" FontFamily="Georgia" />
+                                    <TextBlock Text="De la plus forte à la plus faible"
+                                               Foreground="#65493B" FontSize="13" Margin="0,4,0,12" />
+                                    <StackPanel x:Name="PokerHandRowsPanel" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Viewbox>
+                </Grid>
             </Border>
         </Grid>
     </Grid>

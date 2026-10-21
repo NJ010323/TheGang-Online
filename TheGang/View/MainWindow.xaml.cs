@@ -48,6 +48,9 @@ public partial class MainWindow : Window
         _heistOutcomeTimer.Tick += (_, _) => HideHeistOutcome();
         _roundTransitionTimer.Tick += (_, _) => HideRoundTransition();
         _dragHeartbeatTimer.Tick += (_, _) => PublishDragPosition();
+        OutcomeGoldImage.Source = ResultCardVisuals.GoldFace;
+        OutcomeAlarmImage.Source = ResultCardVisuals.AlarmFace;
+        PopulateRulesCard();
     }
 
     /// <summary>Affiche le gant dans le jeu actif et libère le curseur système en dehors.</summary>
@@ -122,6 +125,11 @@ public partial class MainWindow : Window
         if (e.Key == Key.F11)
         {
             SetFullScreen(!_isFullScreen);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && RulesOverlay.Visibility == Visibility.Visible)
+        {
+            CloseRulesCard();
             e.Handled = true;
         }
         else if (e.Key == Key.Escape && SettingsOverlay.Visibility == Visibility.Visible)
@@ -307,7 +315,6 @@ public partial class MainWindow : Window
         }
 
         GamePhaseText.Text = PhaseLabel(game);
-        GameScoreText.Text = $"Braquage {game.HeistNumber}   ·   {game.SuccessfulHeists} réussis / {game.FailedHeists} ratés";
         TablePhaseText.Text = TableMessage(game);
         var phaseChanged = _lastRenderedPhase != game.Phase;
         if (phaseChanged)
@@ -325,6 +332,7 @@ public partial class MainWindow : Window
         RenderActivity(game);
         RenderControls(game, identity.PlayerId);
         ProcessGameEvents(game);
+        RenderScoreCards(game);
     }
 
     /// <summary>Conserve les cartes déjà rendues et retourne seulement les nouvelles, dans l'ordre.</summary>
@@ -371,7 +379,7 @@ public partial class MainWindow : Window
         {
             var wasVisible = _visibleHands.Contains(player.Id);
             var seat = TableVisuals.Seat(player, isSelf, player.Id == hostId,
-                player.Id == game.NextPlayerToRevealId, TableVisuals.RoundColor(game.Phase),
+                player.Id == game.NextPlayerToRevealId, game.Phase, TableVisuals.RoundColor(game.Phase),
                 (chip, value) =>
                 {
                     _visibleTokenSources[value] = chip;
@@ -456,17 +464,33 @@ public partial class MainWindow : Window
         var choosing = game.Phase is GamePhase.PreFlop or GamePhase.Flop or GamePhase.Turn or GamePhase.River;
         var self = game.Players.First(player => player.Id == selfId);
         TokenActions.Visibility = choosing ? Visibility.Visible : Visibility.Collapsed;
+        FooterPhaseHint.Visibility = choosing ? Visibility.Collapsed : Visibility.Visible;
+        FooterPhaseHint.Text = game.Phase switch
+        {
+            GamePhase.Showdown => "RÉVÉLATION DES MAINS · ORDRE DES JETONS ROUGES",
+            GamePhase.HeistComplete => "BRAQUAGE TERMINÉ · PRÉPAREZ LE SUIVANT",
+            GamePhase.Finished => "PARTIE TERMINÉE",
+            _ => string.Empty
+        };
         ReturnTokenButton.IsEnabled = choosing && self.CurrentToken.HasValue && !game.AllChoicesConfirmed;
         ConfirmButton.IsEnabled = choosing && game.AllPlayersHaveTokens && !self.IsChoiceConfirmed;
         WithdrawButton.IsEnabled = choosing && self.IsChoiceConfirmed;
 
-        HostActions.Visibility = _session!.IsHost ? Visibility.Visible : Visibility.Collapsed;
         AdvanceButton.Visibility = choosing && game.AllChoicesConfirmed ? Visibility.Visible : Visibility.Collapsed;
         RevealButton.Visibility = game.Phase == GamePhase.Showdown && game.NextPlayerToRevealId is not null
             ? Visibility.Visible : Visibility.Collapsed;
         ResolveButton.Visibility = game.Phase == GamePhase.Showdown && game.NextPlayerToRevealId is null
             ? Visibility.Visible : Visibility.Collapsed;
         NextHeistButton.Visibility = game.Phase == GamePhase.HeistComplete ? Visibility.Visible : Visibility.Collapsed;
+        var hostCanAct = _session!.IsHost && (AdvanceButton.Visibility == Visibility.Visible ||
+            RevealButton.Visibility == Visibility.Visible || ResolveButton.Visibility == Visibility.Visible ||
+            NextHeistButton.Visibility == Visibility.Visible);
+        HostActions.Visibility = hostCanAct ? Visibility.Visible : Visibility.Collapsed;
+        FooterHostHint.Visibility = hostCanAct ? Visibility.Collapsed : Visibility.Visible;
+        FooterHostHint.Text = _session.IsHost && choosing
+            ? "En attente de la confirmation de tous les joueurs."
+            : game.Phase == GamePhase.Finished ? "La partie est terminée."
+            : "L'hôte lancera la prochaine étape quand la table sera prête.";
     }
 
     /// <summary>Nom lisible du tour dans le bandeau du plateau.</summary>
@@ -566,6 +590,7 @@ public partial class MainWindow : Window
         if (_draggedTokenValue is not null) EndChipDrag();
         HideHeistOutcome();
         HideRoundTransition();
+        CloseRulesCard();
         await CloseSessionAsync();
         MenuPanel.Visibility = Visibility.Visible;
         EntryPanel.Visibility = LobbyPanel.Visibility = GamePanel.Visibility = Visibility.Collapsed;
@@ -585,6 +610,7 @@ public partial class MainWindow : Window
         _lastHeistNumber = _lastCommunityCount = 0;
         _lastSeenEventSequence = 0;
         _visibleHands.Clear();
+        ResetScoreCards();
         _connectionWarning = false;
         if (string.IsNullOrWhiteSpace(message)) HideNotice();
         else ShowNotice(message, NoticeLevel.Info, autoHide: false);

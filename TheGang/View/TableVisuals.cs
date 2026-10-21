@@ -4,7 +4,9 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
-using Model.Game.Card.CardEnum;
+using System.Windows.Shapes;
+using System.Globalization;
+using Model.Game;
 using Model.Game.Tokens.TokenEnum;
 using Network;
 
@@ -21,18 +23,18 @@ internal static class TableVisuals
     private static readonly BitmapSource ChipAtlas = new BitmapImage(
         new Uri("pack://application:,,,/View;component/Assets/chip-atlas.png", UriKind.Absolute));
     private static readonly IReadOnlyDictionary<TokenColors, BitmapSource> ChipSprites = CreateChipSprites();
+    private static readonly Dictionary<(int Value, double Size), Geometry> NumberOutlines = new();
 
-    /// <summary>Découpe les quatre cases du sprite atlas une seule fois au chargement.</summary>
+    /// <summary>Recadre chaque cercle sur son centre réel, sans les marges inégales de l'atlas.</summary>
     private static IReadOnlyDictionary<TokenColors, BitmapSource> CreateChipSprites()
     {
-        var width = ChipAtlas.PixelWidth / 2;
-        var height = ChipAtlas.PixelHeight / 2;
+        // L'atlas intégré mesure 1278 × 1230 px ; ces carrés de 520 px ont le même centre visuel.
         return new Dictionary<TokenColors, BitmapSource>
         {
-            [TokenColors.White] = new CroppedBitmap(ChipAtlas, new Int32Rect(0, 0, width, height)),
-            [TokenColors.Yellow] = new CroppedBitmap(ChipAtlas, new Int32Rect(width, 0, width, height)),
-            [TokenColors.Orange] = new CroppedBitmap(ChipAtlas, new Int32Rect(0, height, width, height)),
-            [TokenColors.Red] = new CroppedBitmap(ChipAtlas, new Int32Rect(width, height, width, height))
+            [TokenColors.White] = new CroppedBitmap(ChipAtlas, new Int32Rect(75, 41, 520, 520)),
+            [TokenColors.Yellow] = new CroppedBitmap(ChipAtlas, new Int32Rect(681, 41, 520, 520)),
+            [TokenColors.Orange] = new CroppedBitmap(ChipAtlas, new Int32Rect(75, 654, 520, 520)),
+            [TokenColors.Red] = new CroppedBitmap(ChipAtlas, new Int32Rect(681, 654, 520, 520))
         };
     }
 
@@ -60,49 +62,7 @@ internal static class TableVisuals
                 Margin = new Thickness(3),
                 ToolTip = "Carte cachée"
             };
-
-        var (symbol, isRed) = card.Suit switch
-        {
-            CardColors.Coeur => ("♥", true),
-            CardColors.Carreau => ("♦", true),
-            CardColors.Pique => ("♠", false),
-            _ => ("♣", false)
-        };
-        var rank = card.Rank switch { 1 => "A", 11 => "V", 12 => "D", 13 => "R", _ => card.Rank.ToString() };
-        var ink = Brushes.Black;
-        if (isRed) ink = new SolidColorBrush(Color.FromRgb(183, 39, 40));
-
-        var face = new Grid();
-        face.Children.Add(new TextBlock
-        {
-            Text = symbol,
-            FontSize = height * 0.45,
-            Foreground = ink,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center
-        });
-        face.Children.Add(new TextBlock
-        {
-            Text = $"{rank}{symbol}",
-            FontSize = Math.Max(12, width * 0.22),
-            FontWeight = FontWeights.Bold,
-            Foreground = ink,
-            Margin = new Thickness(5, 3, 0, 0),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top
-        });
-        return new Border
-        {
-            Width = width,
-            Height = height,
-            CornerRadius = new CornerRadius(6),
-            Background = new SolidColorBrush(Color.FromRgb(255, 248, 228)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(214, 189, 143)),
-            BorderThickness = new Thickness(2),
-            Margin = new Thickness(3),
-            Child = face,
-            ToolTip = $"{rank} de {card.Suit}"
-        };
+        return PlayingCardVisuals.Face(card, width, height);
     }
 
     /// <summary>Retourne une carte commune de dos vers sa face après un délai, sans reconstruire le plateau.</summary>
@@ -142,38 +102,87 @@ internal static class TableVisuals
         return holder;
     }
 
-    /// <summary>Dessine un jeton lisible même après réduction du plateau.</summary>
+    /// <summary>Pose un médaillon art déco sur le sprite et centre précisément le chiffre.</summary>
     public static FrameworkElement Chip(int value, TokenColors color, double size = 42)
     {
-        var chip = new Grid { Width = size, Height = size, Margin = new Thickness(2) };
-        chip.Children.Add(new Image
+        // Le fond transparent rend toute la surface du jeton cliquable pour le glisser-déposer.
+        // Les éléments décoratifs ne participent pas au hit test : le Grid reçoit le clic.
+        var chip = new Grid { Width = size, Height = size, Margin = new Thickness(2), Background = Brushes.Transparent };
+        var sprite = new Image
         {
             Source = ChipSprites[color],
             Stretch = Stretch.Fill,
-            Effect = new DropShadowEffect { BlurRadius = 6, ShadowDepth = 1, Opacity = 0.45 }
-        });
-        chip.Children.Add(new TextBlock
+            Effect = new DropShadowEffect { BlurRadius = 6, ShadowDepth = 1, Opacity = 0.45 },
+            IsHitTestVisible = false
+        };
+        RenderOptions.SetBitmapScalingMode(sprite, BitmapScalingMode.HighQuality);
+        chip.Children.Add(sprite);
+
+        chip.Children.Add(new Ellipse
         {
-            Text = value.ToString(),
-            Foreground = Brushes.Black,
-            FontSize = size * 0.38,
-            FontWeight = FontWeights.Black,
+            Width = size * 0.64,
+            Height = size * 0.64,
+            Fill = new RadialGradientBrush(Color.FromRgb(79, 57, 45), Color.FromRgb(29, 21, 24)),
+            Stroke = new SolidColorBrush(Color.FromRgb(240, 204, 125)),
+            StrokeThickness = Math.Max(0.8, size * 0.028),
             HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false
         });
+        chip.Children.Add(new Ellipse
+        {
+            Width = size * 0.53,
+            Height = size * 0.53,
+            Fill = Brushes.Transparent,
+            Stroke = new SolidColorBrush(Color.FromRgb(133, 99, 55)),
+            StrokeThickness = Math.Max(0.5, size * 0.012),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false
+        });
+        chip.Children.Add(NumberShape(value, size));
         chip.ToolTip = $"Jeton {ColorName(color)} numéro {value}";
         return chip;
     }
 
+    /// <summary>Centre les contours réels du chiffre, y compris ceux du 1 et des valeurs à deux chiffres.</summary>
+    private static Path NumberShape(int value, double size)
+    {
+        if (!NumberOutlines.TryGetValue((value, size), out var outline))
+        {
+            var fontSize = size * (value >= 10 ? 0.34 : 0.43);
+            var number = new FormattedText(value.ToString(CultureInfo.InvariantCulture),
+                CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                new Typeface(new FontFamily("Georgia"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+                fontSize, Brushes.White, 1);
+            outline = number.BuildGeometry(new Point());
+            var bounds = outline.Bounds;
+            outline.Transform = new TranslateTransform(
+                size / 2 - (bounds.Left + bounds.Right) / 2,
+                size / 2 - (bounds.Top + bounds.Bottom) / 2);
+            outline.Freeze();
+            NumberOutlines[(value, size)] = outline;
+        }
+        return new Path
+        {
+            Data = outline,
+            Width = size,
+            Height = size,
+            Stretch = Stretch.None,
+            Fill = new SolidColorBrush(Color.FromRgb(255, 239, 194)),
+            IsHitTestVisible = false
+        };
+    }
+
     /// <summary>Construit une place avec nom, deux cartes, jeton et état de confirmation.</summary>
     public static Border Seat(PlayerSnapshot player, bool isSelf, bool isHost,
-        bool isNextToReveal, TokenColors roundColor,
+        bool isNextToReveal, GamePhase phase, TokenColors roundColor,
         Action<FrameworkElement, int>? onTokenCreated = null)
     {
         var frame = new Border
         {
             Width = 210,
-            Height = 137,
+            Height = 142,
             CornerRadius = new CornerRadius(10),
             Background = new SolidColorBrush(Color.FromArgb(235, 23, 15, 18)),
             BorderBrush = isNextToReveal ? new SolidColorBrush(Color.FromRgb(255, 214, 115))
@@ -201,15 +210,79 @@ internal static class TableVisuals
             onTokenCreated?.Invoke(tokenVisual, token);
         }
         content.Children.Add(cardRow);
-        content.Children.Add(new TextBlock
+        // La petite plaque reprend les tons du plateau ; les points gardent l'historique des quatre tours.
+        var handVisible = !isSelf && player.Hand.Count == 2;
+        var showingHands = phase is GamePhase.Showdown or GamePhase.HeistComplete or GamePhase.Finished;
+        var handRevealed = showingHands && (handVisible || phase is GamePhase.HeistComplete or GamePhase.Finished);
+        var statusText = isNextToReveal ? "À RÉVÉLER" : showingHands
+            ? handRevealed ? "MAIN RÉVÉLÉE" : "EN ATTENTE"
+            : player.IsChoiceConfirmed ? "CHOIX CONFIRMÉ" :
+                player.CurrentToken is null ? "CHOIX EN COURS" : "À CONFIRMER";
+        var statusColor = isNextToReveal ? Color.FromRgb(243, 207, 126) :
+            showingHands ? handRevealed ? Color.FromRgb(228, 207, 164) : Color.FromRgb(178, 151, 119) :
+            player.IsChoiceConfirmed ? Color.FromRgb(228, 207, 164) :
+                player.CurrentToken is null ? Color.FromRgb(178, 151, 119) : Color.FromRgb(225, 176, 103);
+        var statusRow = new Grid { Margin = new Thickness(0, 3, 0, 0) };
+        statusRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        statusRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var statusContents = new StackPanel
         {
-            Text = isNextToReveal ? "À révéler maintenant" : player.IsChoiceConfirmed ? "✓ Choix confirmé" :
-                player.CurrentToken is null ? "Choisit son jeton…" : "En attente de confirmation",
-            Foreground = player.IsChoiceConfirmed ? new SolidColorBrush(Color.FromRgb(157, 221, 158)) :
-                new SolidColorBrush(Color.FromRgb(220, 188, 135)),
-            FontSize = 12,
+            Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center
+        };
+        statusContents.Children.Add(new TextBlock
+        {
+            Text = "◆", Foreground = new SolidColorBrush(statusColor),
+            FontSize = 7, VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 5, 0)
         });
+        statusContents.Children.Add(new TextBlock
+        {
+            Text = statusText, Foreground = new SolidColorBrush(statusColor),
+            FontSize = 10, FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        statusRow.Children.Add(new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(48, 31, 29)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(139, 104, 67)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(5, 2, 5, 2),
+            Child = statusContents,
+            ToolTip = statusText
+        });
+        var progress = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 0, 0)
+        };
+        foreach (var color in new[] { TokenColors.White, TokenColors.Yellow, TokenColors.Orange, TokenColors.Red })
+        {
+            var signal = player.Signals.FirstOrDefault(choice => choice.Color == color);
+            progress.Children.Add(new Border
+            {
+                Width = 9,
+                Height = 9,
+                CornerRadius = new CornerRadius(5),
+                Margin = new Thickness(1.5, 0, 0, 0),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(201, 177, 137)),
+                BorderThickness = new Thickness(1),
+                Background = signal is null ? Brushes.Transparent : color switch
+                {
+                    TokenColors.White => Brushes.White,
+                    TokenColors.Yellow => Brushes.Gold,
+                    TokenColors.Orange => Brushes.DarkOrange,
+                    _ => Brushes.IndianRed
+                },
+                ToolTip = signal is null ? $"Jeton {ColorName(color)} non choisi" :
+                    $"Jeton {ColorName(color)} : {signal.Value}"
+            });
+        }
+        Grid.SetColumn(progress, 1);
+        statusRow.Children.Add(progress);
+        content.Children.Add(statusRow);
         frame.Child = content;
         frame.ToolTip = player.Signals.Count == 0 ? "Aucun tour confirmé" :
             string.Join("  •  ", player.Signals.Select(signal => $"{ColorName(signal.Color)} : {signal.Value}"));
