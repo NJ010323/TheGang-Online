@@ -1,7 +1,7 @@
 namespace Model.Game;
 
 /// <summary>
-/// Définit les phases principales d'une partie.
+/// Définit les phases successives d'un braquage et de la partie.
 /// </summary>
 public enum GamePhase
 {
@@ -10,5 +10,7 @@ public enum GamePhase
     Flop,
     Turn,
     River,
-    Showdown
+    Showdown,
+    HeistComplete,
+    Finished
 }

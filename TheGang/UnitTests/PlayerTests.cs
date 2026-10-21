@@ -1,58 +1,47 @@
-using Model.Game.Card;
-using Model.Game.Card.CardEnum;
-using Model.Game.Cards;
-using Model.Game.Tokens;
+using Model.Game;
+using Model.Game.Cards.Interfaces;
 using Model.Game.Tokens.TokenEnum;
-using Model.Players;
 
 namespace UnitTests;
 
-/// <summary>
-/// Tests unitaires pour le joueur.
-/// </summary>
 public class PlayerTests
 {
     [Fact]
-    public void RecevoirCarte_DevraitAjouterLaCarteALaMain()
+    public void GameExposesReadOnlyPlayerHandsAndCommunityCards()
     {
-        // Arrange
-        var player = new Player("Alice");
-        var card = new Card(CardColors.Carreau, 7);
+        var game = new Game(new Random(7));
+        game.AddPlayer("Alice");
+        game.AddPlayer("Bob");
+        game.AddPlayer("Chloe");
+        game.StartGame();
 
-        // Act
-        player.ReceiveCard(card);
-
-        // Assert
-        Assert.Single(player.Hand);
-        Assert.Equal(card, player.Hand[0]);
+        Assert.Throws<NotSupportedException>(() =>
+            ((IList<ICard>)game.Players[0].Hand).Clear());
+        Assert.Throws<NotSupportedException>(() =>
+            ((IList<ICard>)game.CommunityCards).Clear());
+        Assert.Throws<NotSupportedException>(() =>
+            ((IList<Model.Players.Player>)game.Players).Clear());
     }
 
     [Fact]
-    public void AssignerJetonSignal_DevraitStockerLeJeton()
+    public void PreviousRoundSignalsRemainAvailable()
     {
-        // Arrange
-        var player = new Player("Alice");
-        var token = new Token(1, TokenColors.White);
+        var game = new Game(new Random(7));
+        game.AddPlayer("Alice");
+        game.AddPlayer("Bob");
+        game.AddPlayer("Chloe");
+        game.StartGame();
+        foreach (var (player, index) in game.Players.Select((player, index) => (player, index)))
+            game.TakeToken(player.Id, index + 1);
+        foreach (var player in game.Players)
+            game.ConfirmChoice(player.Id);
 
-        // Act
-        player.AssignSignalToken(token);
+        game.RevealFlop();
 
-        // Assert
-        Assert.NotNull(player.SignalToken);
-        Assert.Equal(token, player.SignalToken);
-    }
-
-    [Fact]
-    public void EffacerJetonSignal_DevraitRetirerLeJeton()
-    {
-        // Arrange
-        var player = new Player("Alice");
-        player.AssignSignalToken(new Token(1, TokenColors.White));
-
-        // Act
-        player.ClearSignalToken();
-
-        // Assert
-        Assert.Null(player.SignalToken);
+        Assert.All(game.Players, player =>
+        {
+            Assert.True(player.Signals.ContainsKey(TokenColors.White));
+            Assert.Null(player.SignalToken);
+        });
     }
 }

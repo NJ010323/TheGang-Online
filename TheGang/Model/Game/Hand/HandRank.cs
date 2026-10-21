@@ -1,7 +1,7 @@
 namespace Model.Game.Hand;
 
 /// <summary>
-/// Représente la force d'une main de poker.
+/// Représente la force croissante des catégories de mains de poker.
 /// </summary>
 public enum HandRank
 {
@@ -13,5 +13,6 @@ public enum HandRank
     Flush = 6,
     FullHouse = 7,
     FourOfKind = 8,
-    StraightFlush = 9
+    StraightFlush = 9,
+    RoyalFlush = 10
 }

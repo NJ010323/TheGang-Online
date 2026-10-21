@@ -4,16 +4,20 @@ using Model.Game.Cards.Interfaces;
 
 namespace Model.Game.Deck;
 
+/// <summary>Paquet de 52 cartes, réinitialisé au début de chaque braquage.</summary>
 public class Deck
 {
+    // Cartes non distribuées, dans l'ordre de pioche.
     private readonly List<ICard> _cards;
-    private static readonly Random _random = new();
+    // Source aléatoire injectable pour rendre les parties de test reproductibles.
+    private readonly Random _random;
 
     /// <summary>
     /// Initialise un nouveau deck standard de 52 cartes.
     /// </summary>
-    public Deck()
+    public Deck(Random? random = null)
     {
+        _random = random ?? Random.Shared;
         _cards = new List<ICard>();
         InitializeDeck();
     }

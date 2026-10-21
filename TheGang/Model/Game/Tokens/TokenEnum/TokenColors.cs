@@ -1,5 +1,6 @@
 namespace Model.Game.Tokens.TokenEnum;
 
+/// <summary>Couleurs des jetons, dans l'ordre des quatre tours d'un braquage.</summary>
 public enum TokenColors
 {
     White,  // Couleur pour le jeton du Tour 1

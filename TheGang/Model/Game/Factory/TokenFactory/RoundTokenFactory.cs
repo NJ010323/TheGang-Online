@@ -8,18 +8,21 @@ namespace Model.Game.Factory.TokenFactory;
 /// </summary>
 public class RoundTokenFactory : ITokenFactory
 {
+    // Couleur commune à tous les jetons produits par cette fabrique.
     private readonly TokenColors _color;
 
+    /// <summary>Prépare une fabrique pour la couleur du tour demandé.</summary>
     public RoundTokenFactory(TokenColors color)
     {
         _color = color;
     }
 
+    /// <summary>Crée exactement un jeton par joueur, numéroté de 1 à l'effectif.</summary>
     public IReadOnlyList<Token> CreateTokens(int playerCount)
     {
-        if (playerCount <= 0)
+        if (playerCount is < 3 or > 6)
         {
-            throw new ArgumentException("Le nombre de joueurs doit être supérieur à zéro.");
+            throw new ArgumentOutOfRangeException(nameof(playerCount), "Le jeu de base accepte trois à six joueurs.");
         }
 
         var tokens = new List<Token>();
@@ -28,6 +31,6 @@ public class RoundTokenFactory : ITokenFactory
             tokens.Add(new Token(value, _color));
         }
 
-        return tokens;
+        return tokens.AsReadOnly();
     }
 }

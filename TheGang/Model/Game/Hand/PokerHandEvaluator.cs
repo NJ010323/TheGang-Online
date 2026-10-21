@@ -9,7 +9,7 @@ namespace Model.Game.Hand;
 public static class PokerHandEvaluator
 {
     /// <summary>
-    /// Évalue la meilleure main possible à partir des cartes du joueur et des cartes communes.
+    /// Compare toutes les combinaisons de cinq cartes et retient la plus forte.
     /// </summary>
     public static HandScore Evaluate(IEnumerable<ICard> holeCards, IEnumerable<ICard> communityCards)
     {
@@ -32,6 +32,7 @@ public static class PokerHandEvaluator
         return bestScore ?? throw new InvalidOperationException("Impossible d'évaluer la main.");
     }
 
+    /// <summary>Énumère chaque combinaison de cinq cartes sans répétition.</summary>
     private static IEnumerable<IReadOnlyList<ICard>> GetFiveCardCombinations(IReadOnlyList<ICard> cards)
     {
         for (int i = 0; i < cards.Count - 4; i++)
@@ -59,6 +60,7 @@ public static class PokerHandEvaluator
         }
     }
 
+    /// <summary>Classe cinq cartes et prépare les valeurs de départage.</summary>
     private static HandScore EvaluateFiveCards(IReadOnlyList<ICard> cards)
     {
         var ranks = cards.Select(card => NormalizeRank(card.Rank)).OrderByDescending(rank => rank).ToList();
@@ -75,7 +77,8 @@ public static class PokerHandEvaluator
 
         if (straightHigh.HasValue && isFlush)
         {
-            return new HandScore(HandRank.StraightFlush, new List<int> { straightHigh.Value });
+            var rank = straightHigh.Value == 14 ? HandRank.RoyalFlush : HandRank.StraightFlush;
+            return new HandScore(rank, new List<int> { straightHigh.Value });
         }
 
         if (groupedRanks[0].Count() == 4)
@@ -127,11 +130,13 @@ public static class PokerHandEvaluator
         return new HandScore(HandRank.HighCard, ranks);
     }
 
+    /// <summary>Convertit l'as, stocké comme 1, en valeur haute pour les comparaisons.</summary>
     private static int NormalizeRank(int rank)
     {
         return rank == 1 ? 14 : rank;
     }
 
+    /// <summary>Retourne la carte haute d'une quinte, avec le cas spécial A-2-3-4-5.</summary>
     private static int? GetStraightHigh(IReadOnlyList<int> ranks)
     {
         var distinctRanks = ranks.Distinct().OrderByDescending(rank => rank).ToList();

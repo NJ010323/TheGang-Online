@@ -155,7 +155,7 @@ public class DeckTests
     {
         // Arrange
         var deck = new Deck();
-        var beforeShuffle = GetAllCards(deck);
+        var beforeShuffle = GetAllCards(new Deck());
         
         // Act
         deck.Shuffle();
@@ -172,11 +172,9 @@ public class DeckTests
     private static HashSet<string> GetAllCards(Deck deck)
     {
         var cards = new HashSet<string>();
-        var tempDeck = new Deck(); // Crée une copie pour ne pas modifier le deck original
-        
-        while (tempDeck.CardsRemaining > 0)
+        while (deck.CardsRemaining > 0)
         {
-            cards.Add(tempDeck.DealCard().ToString());
+            cards.Add(deck.DealCard().ToString());
         }
         
         return cards;

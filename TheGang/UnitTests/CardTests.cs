@@ -79,54 +79,22 @@ public class CardTests
     }
 
     /// <summary>
-    /// Vérifie que la création d'une carte avec une valeur invalide ne génère pas d'exception.
+    /// Vérifie que les valeurs invalides sont refusées.
     /// </summary>
     [Theory]
     [InlineData(0)]   // En dessous de la plage valide
     [InlineData(14)]  // Au-dessus de la plage valide
     [InlineData(100)] // Bien au-dessus de la plage valide
     [InlineData(-1)]  // Valeur négative
-    public void Carte_QuandCreeeAvecValeurInvalide_NeDevraitPasLancerException(int invalidRank)
+    public void Carte_QuandCreeeAvecValeurInvalide_DevraitLancerException(int invalidRank)
     {
-        // Arrange & Act
-        var exception = Record.Exception(() => new Card(CardColors.Carreau, invalidRank));
-
-        // Assert
-        Assert.Null(exception);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Card(CardColors.Carreau, invalidRank));
     }
 
-    /// <summary>
-    /// Vérifie que la propriété Suit peut être modifiée après la création de la carte.
-    /// </summary>
     [Fact]
-    public void Couleur_QuandModifiee_DevraitMettreAJourLaCouleurDeLaCarte()
+    public void Carte_QuandCreeeAvecCouleurInvalide_DevraitLancerException()
     {
-        // Arrange
-        var card = new Card(CardColors.Pique, 5);
-        var newSuit = CardColors.Coeur;
-
-        // Act
-        card.Suit = newSuit;
-
-        // Assert
-        Assert.Equal(newSuit, card.Suit);
-    }
-
-    /// <summary>
-    /// Vérifie que la propriété Rank peut être modifiée après la création de la carte.
-    /// </summary>
-    [Fact]
-    public void Valeur_QuandModifiee_DevraitMettreAJourLaValeurDeLaCarte()
-    {
-        // Arrange
-        var card = new Card(CardColors.Pique, 5);
-        var newRank = 10;
-
-        // Act
-        card.Rank = newRank;
-
-        // Assert
-        Assert.Equal(newRank, card.Rank);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Card((CardColors)99, 5));
     }
 
     /// <summary>

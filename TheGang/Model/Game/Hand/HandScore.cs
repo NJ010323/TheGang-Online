@@ -5,16 +5,20 @@ namespace Model.Game.Hand;
 /// </summary>
 public sealed class HandScore : IComparable<HandScore>
 {
+    /// <summary>Famille de la main, de la carte haute à la quinte flush royale.</summary>
     public HandRank Rank { get; }
 
+    /// <summary>Valeurs comparées dans l'ordre pour départager deux mains de même famille.</summary>
     public IReadOnlyList<int> Tiebreakers { get; }
 
+    /// <summary>Crée un score immuable à partir d'une catégorie et de ses départages.</summary>
     public HandScore(HandRank rank, IReadOnlyList<int> tiebreakers)
     {
         Rank = rank;
-        Tiebreakers = tiebreakers;
+        Tiebreakers = Array.AsReadOnly(tiebreakers.ToArray());
     }
 
+    /// <summary>Compare d'abord la catégorie, puis les valeurs de départage.</summary>
     public int CompareTo(HandScore? other)
     {
         if (other is null)
@@ -41,6 +45,7 @@ public sealed class HandScore : IComparable<HandScore>
         return Tiebreakers.Count.CompareTo(other.Tiebreakers.Count);
     }
 
+    /// <summary>Retourne la catégorie et ses valeurs de départage.</summary>
     public override string ToString()
     {
         return $"{Rank} ({string.Join(", ", Tiebreakers)})";
