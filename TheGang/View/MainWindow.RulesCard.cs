@@ -62,7 +62,7 @@ public partial class MainWindow
             {
                 Text = number,
                 Foreground = Brushes.Black,
-                FontSize = 11,
+                FontSize = 13,
                 FontWeight = FontWeights.Bold,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
@@ -74,13 +74,13 @@ public partial class MainWindow
             Text = title,
             Foreground = new SolidColorBrush(Color.FromRgb(63, 39, 32)),
             FontWeight = FontWeights.Bold,
-            FontSize = 14
+            FontSize = 17
         });
         words.Children.Add(new TextBlock
         {
             Text = explanation,
             Foreground = new SolidColorBrush(Color.FromRgb(83, 61, 46)),
-            FontSize = 12,
+            FontSize = 15,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 2, 0, 0)
         });
@@ -93,21 +93,26 @@ public partial class MainWindow
     private void AddHand(string name, params (int Rank, CardColors Suit)[] cards)
     {
         var index = PokerHandRowsPanel.Children.Count + 1;
-        var row = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+        // Marges resserrées : les dix exemples conservent des cartes lisibles sur une seule page.
+        var row = new Grid { Margin = new Thickness(0, 0, 0, 1) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(25) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.Children.Add(new TextBlock
         {
             Text = index.ToString("00"),
             Foreground = new SolidColorBrush(Color.FromRgb(142, 72, 54)),
-            FontSize = 11,
+            FontSize = 15,
             FontWeight = FontWeights.Bold,
             VerticalAlignment = VerticalAlignment.Center
         });
         var illustration = new StackPanel { Orientation = Orientation.Horizontal };
         foreach (var (rank, suit) in cards)
-            illustration.Children.Add(TableVisuals.Card(new CardSnapshot(suit, rank), 32, 43));
+        {
+            var card = TableVisuals.Card(new CardSnapshot(suit, rank), 42, 52);
+            card.Margin = new Thickness(1);
+            illustration.Children.Add(card);
+        }
         Grid.SetColumn(illustration, 1);
         row.Children.Add(illustration);
         var label = new TextBlock
@@ -115,7 +120,7 @@ public partial class MainWindow
             Text = name,
             Foreground = new SolidColorBrush(Color.FromRgb(57, 37, 30)),
             FontWeight = FontWeights.SemiBold,
-            FontSize = 13,
+            FontSize = 18,
             VerticalAlignment = VerticalAlignment.Center,
             TextWrapping = TextWrapping.Wrap
         };

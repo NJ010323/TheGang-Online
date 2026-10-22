@@ -1,5 +1,6 @@
 using Model.Game;
 using Model.Game.Card.CardEnum;
+using Model.Game.Hand;
 using Model.Game.Tokens.TokenEnum;
 using Model.Lobby;
 
@@ -19,6 +20,9 @@ public sealed record SignalSnapshot(TokenColors Color, int Value);
 /// <summary>Vue d'un joueur ; seules ses propres cartes ou des cartes dévoilées sont présentes.</summary>
 public sealed record PlayerSnapshot(Guid Id, string Name, IReadOnlyList<CardSnapshot> Hand,
     IReadOnlyList<SignalSnapshot> Signals, int? CurrentToken, bool IsChoiceConfirmed);
+/// <summary>Meilleure combinaison d'un joueur dont la main est déjà publique.</summary>
+public sealed record RevealedHandSnapshot(Guid PlayerId, int TokenValue, HandRank Rank,
+    IReadOnlyList<int> Tiebreakers);
 /// <summary>Type d'action publique à afficher et animer sur tous les clients.</summary>
 public enum GameEventKind
 {
@@ -41,7 +45,11 @@ public sealed record GameSnapshot(GamePhase Phase, GameResult Result, int HeistN
     IReadOnlyList<CardSnapshot> CommunityCards, IReadOnlyList<PlayerSnapshot> Players,
     IReadOnlyList<int> AvailableTokens, bool AllPlayersHaveTokens, bool AllChoicesConfirmed,
     Guid? NextPlayerToRevealId, IReadOnlyList<GameEventSnapshot> RecentEvents,
-    IReadOnlyList<GameDragSnapshot> ActiveDrags);
+    IReadOnlyList<GameDragSnapshot> ActiveDrags)
+{
+    /// <summary>Mains dévoilées uniquement ; vide si un ancien hôte ne fournit pas encore ce champ.</summary>
+    public IReadOnlyList<RevealedHandSnapshot> RevealedHands { get; init; } = [];
+}
 
 /// <summary>Actions acceptées par le serveur de partie.</summary>
 public enum GameAction

@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 
 namespace View;
 
@@ -20,43 +21,70 @@ internal static class ResultCardVisuals
     }
 
     /// <summary>Construit une carte retournable avec son illustration propre à la colonne.</summary>
-    public static ScoreCardSlot Slot(bool gold) => new(gold ? GoldFace : AlarmFace,
-        gold ? "Carte de braquage réussi" : "Carte d'alarme");
+    public static ScoreCardSlot Slot(bool gold, int position) => new(gold ? GoldFace : AlarmFace,
+        gold ? "Carte de braquage réussi" : "Carte d'alarme", position);
 }
 
 /// <summary>Carte de score qui conserve son état face cachée ou révélée entre les actualisations réseau.</summary>
 internal sealed class ScoreCardSlot : Grid
 {
     private readonly Border _back;
-    private readonly Image _face;
+    private readonly Border _face;
     private readonly ScaleTransform _flip = new();
     private bool _revealed;
 
-    public ScoreCardSlot(ImageSource illustration, string description)
+    public ScoreCardSlot(ImageSource illustration, string description, int position)
     {
-        Width = 45;
-        Height = 32;
+        Width = 72;
+        Height = 42;
         Margin = new Thickness(2, 0, 2, 0);
         RenderTransformOrigin = new Point(0.5, 0.5);
         RenderTransform = _flip;
         ToolTip = description;
 
+        var seal = new Grid();
+        seal.Children.Add(new Ellipse
+        {
+            Width = 26,
+            Height = 26,
+            Stroke = new SolidColorBrush(Color.FromRgb(196, 153, 84)),
+            StrokeThickness = 1.5
+        });
+        seal.Children.Add(new TextBlock
+        {
+            Text = position.ToString(),
+            Foreground = new SolidColorBrush(Color.FromRgb(245, 209, 129)),
+            FontFamily = new FontFamily("Georgia"),
+            FontSize = 17,
+            FontWeight = FontWeights.Bold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        });
         _back = new Border
         {
             Background = new SolidColorBrush(Color.FromRgb(41, 28, 31)),
             BorderBrush = new SolidColorBrush(Color.FromRgb(177, 137, 75)),
-            BorderThickness = new Thickness(1.5),
+            BorderThickness = new Thickness(2),
             CornerRadius = new CornerRadius(4),
-            Child = new TextBlock
+            Padding = new Thickness(3),
+            Child = new Border
             {
-                Text = "✦",
-                Foreground = new SolidColorBrush(Color.FromRgb(220, 185, 105)),
-                FontSize = 20,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
+                BorderBrush = new SolidColorBrush(Color.FromRgb(105, 77, 51)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(2),
+                Child = seal
             }
         };
-        _face = new Image { Source = illustration, Stretch = Stretch.Fill, Visibility = Visibility.Collapsed };
+        var picture = new Image { Source = illustration, Stretch = Stretch.Fill };
+        RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.HighQuality);
+        _face = new Border
+        {
+            Child = picture,
+            BorderBrush = new SolidColorBrush(Color.FromRgb(245, 207, 133)),
+            BorderThickness = new Thickness(1.5),
+            CornerRadius = new CornerRadius(4),
+            Visibility = Visibility.Collapsed
+        };
         Children.Add(_back);
         Children.Add(_face);
     }

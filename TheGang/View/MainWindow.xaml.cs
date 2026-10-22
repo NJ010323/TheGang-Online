@@ -97,13 +97,15 @@ public partial class MainWindow : Window
     /// <summary>Ferme le jeu via le menu.</summary>
     private void Quit_Click(object sender, RoutedEventArgs e) => Close();
 
-    /// <summary>Ouvre les paramètres d'affichage et synchronise les choix avec la fenêtre.</summary>
+    /// <summary>Ouvre les paramètres et ajoute la commande de sortie seulement pendant une partie.</summary>
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
         WindowedOption.IsChecked = !_isFullScreen;
         FullScreenOption.IsChecked = _isFullScreen;
         AnimationsOnOption.IsChecked = TableVisuals.AnimationsEnabled;
         AnimationsOffOption.IsChecked = !TableVisuals.AnimationsEnabled;
+        GameSettingsSection.Visibility = GamePanel.Visibility == Visibility.Visible
+            ? Visibility.Visible : Visibility.Collapsed;
         SettingsOverlay.Visibility = Visibility.Visible;
     }
 
@@ -232,19 +234,27 @@ public partial class MainWindow : Window
     });
 
     /// <summary>Une partie commencée s'achève pour tous si un joueur la quitte.</summary>
-    private async void ExitGame_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
+    private async void ExitGame_Click(object sender, RoutedEventArgs e)
     {
-        await _session!.Client.LeaveAsync();
-        await ReturnToMenuAsync("La partie a été fermée pour tous les joueurs.");
-    });
+        SettingsOverlay.Visibility = Visibility.Collapsed;
+        await RunAsync(async () =>
+        {
+            await _session!.Client.LeaveAsync();
+            await ReturnToMenuAsync("La partie a été fermée pour tous les joueurs.");
+        });
+    }
 
     /// <summary>Agrandit le tapis ou réaffiche le détail de tous les jetons.</summary>
-    private void HistoryToggle_Click(object sender, RoutedEventArgs e)
+    private void HistoryToggle_Click(object sender, RoutedEventArgs e) =>
+        SetHistoryVisible(!_historyVisible);
+
+    /// <summary>Garde synchronisés la colonne, son contenu et la languette de réouverture.</summary>
+    private void SetHistoryVisible(bool visible)
     {
-        _historyVisible = !_historyVisible;
+        _historyVisible = visible;
         HistoryColumn.Width = new GridLength(_historyVisible ? 306 : 0);
         HistoryPanel.Visibility = _historyVisible ? Visibility.Visible : Visibility.Collapsed;
-        HistoryToggleButton.Content = _historyVisible ? "Masquer le tableau" : "Afficher le tableau";
+        HistoryShowButton.Visibility = _historyVisible ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>Interroge périodiquement l'hôte pour mettre à jour lobby et partie.</summary>
@@ -319,6 +329,7 @@ public partial class MainWindow : Window
         var phaseChanged = _lastRenderedPhase != game.Phase;
         if (phaseChanged)
         {
+            if (game.Phase == GamePhase.Showdown) SetHistoryVisible(true);
             TableVisuals.Reveal(GamePhaseText);
             _lastRenderedPhase = game.Phase;
         }
@@ -329,6 +340,7 @@ public partial class MainWindow : Window
         RenderTokenBank(game, phaseChanged);
         RenderRemoteDrags(game, identity.PlayerId);
         RenderHistory(game);
+        RenderShowdownResults(game);
         RenderActivity(game);
         RenderControls(game, identity.PlayerId);
         ProcessGameEvents(game);
@@ -591,6 +603,7 @@ public partial class MainWindow : Window
         HideHeistOutcome();
         HideRoundTransition();
         CloseRulesCard();
+        SettingsOverlay.Visibility = Visibility.Collapsed;
         await CloseSessionAsync();
         MenuPanel.Visibility = Visibility.Visible;
         EntryPanel.Visibility = LobbyPanel.Visibility = GamePanel.Visibility = Visibility.Collapsed;
@@ -609,6 +622,10 @@ public partial class MainWindow : Window
         _lastRenderedPhase = null;
         _lastHeistNumber = _lastCommunityCount = 0;
         _lastSeenEventSequence = 0;
+        _lastShowdownRevealCount = -1;
+        ShowdownRowsPanel.Children.Clear();
+        ShowdownResultsPanel.Visibility = HistorySubheading.Visibility = Visibility.Collapsed;
+        ActivityPanel.Visibility = Visibility.Visible;
         _visibleHands.Clear();
         ResetScoreCards();
         _connectionWarning = false;

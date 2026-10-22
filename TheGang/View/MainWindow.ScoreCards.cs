@@ -47,8 +47,8 @@ public partial class MainWindow
         AlarmResultCardsPanel.Children.Clear();
         for (var index = 0; index < 3; index++)
         {
-            GoldResultCardsPanel.Children.Add(ResultCardVisuals.Slot(gold: true));
-            AlarmResultCardsPanel.Children.Add(ResultCardVisuals.Slot(gold: false));
+            GoldResultCardsPanel.Children.Add(ResultCardVisuals.Slot(gold: true, index + 1));
+            AlarmResultCardsPanel.Children.Add(ResultCardVisuals.Slot(gold: false, index + 1));
         }
         _shownGoldCards = _shownAlarmCards = _targetGoldCards = _targetAlarmCards = 0;
         GoldCountText.Text = "OR  0/3";

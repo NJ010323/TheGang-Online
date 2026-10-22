@@ -323,7 +323,11 @@ public sealed class HostedLobby
             game.AllPlayersHaveTokens, game.AllChoicesConfirmed, game.NextPlayerToRevealId,
             _events.ToArray(), _activeDrags.Values
                 .Where(active => DateTimeOffset.UtcNow - active.Updated < TimeSpan.FromSeconds(4))
-                .Select(active => active.Drag).ToArray());
+                .Select(active => active.Drag).ToArray())
+        {
+            RevealedHands = game.RevealedHands.Select(hand => new RevealedHandSnapshot(hand.PlayerId,
+                hand.TokenValue, hand.Score.Rank, hand.Score.Tiebreakers.ToArray())).ToArray()
+        };
     }
 
     /// <summary>Supprime toute référence à la carte métier dans la réponse réseau.</summary>

@@ -110,6 +110,7 @@ public class NetworkLobbyTests
         Assert.Equal(GamePhase.PreFlop, hostGame.Phase);
         Assert.Equal(2, hostGame.Players.Single(p => p.Id == host.Identity!.PlayerId).Hand.Count);
         Assert.Empty(bobGame.Players.Single(p => p.Id == host.Identity!.PlayerId).Hand);
+        Assert.Empty(bobGame.RevealedHands);
         Assert.Equal(2, bobGame.Players.Single(p => p.Id == bob.Identity!.PlayerId).Hand.Count);
         Assert.Empty(bobGame.Players.Single(p => p.Id == chloe.Identity!.PlayerId).Hand);
         await Assert.ThrowsAsync<HttpRequestException>(() =>
@@ -139,12 +140,22 @@ public class NetworkLobbyTests
         var order = showdown.Players
             .Select(player => (PlayerId: player.Id, Token: player.CurrentToken!.Value))
             .OrderBy(player => player.Token).Select(player => player.PlayerId).ToArray();
-        foreach (var expectedPlayer in order)
+        for (var index = 0; index < order.Length; index++)
         {
+            var expectedPlayer = order[index];
             var before = await bob.GetGameAsync();
             Assert.Equal(expectedPlayer, before.NextPlayerToRevealId);
+            Assert.Equal(index, before.RevealedHands.Count);
+            Assert.DoesNotContain(before.RevealedHands, hand => hand.PlayerId == expectedPlayer);
             var after = await host.ApplyAsync(new GameActionRequest(GameAction.RevealNextHand));
             Assert.Equal(2, after.Players.Single(p => p.Id == expectedPlayer).Hand.Count);
+            Assert.Equal(index + 1, after.RevealedHands.Count);
+            Assert.Equal(expectedPlayer, after.RevealedHands[^1].PlayerId);
+            Assert.NotEmpty(after.RevealedHands[^1].Tiebreakers);
+            var guestHand = (await bob.GetGameAsync()).RevealedHands[^1];
+            Assert.Equal(expectedPlayer, guestHand.PlayerId);
+            Assert.Equal(after.RevealedHands[^1].Rank, guestHand.Rank);
+            Assert.Equal(after.RevealedHands[^1].Tiebreakers, guestHand.Tiebreakers);
         }
         var result = await host.ApplyAsync(new GameActionRequest(GameAction.ResolveHeist));
         Assert.True(result.Phase is GamePhase.HeistComplete or GamePhase.Finished);
