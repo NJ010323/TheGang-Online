@@ -1,7 +1,9 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Model.Game;
 using Model.Game.Tokens.TokenEnum;
@@ -23,6 +25,10 @@ public partial class MainWindow : Window
     // Ces indicateurs empêchent de superposer des requêtes ou des actions utilisateur.
     private bool _refreshing;
     private bool _busy;
+    private bool _hostActionAvailable;
+    // Le contour de confirmation ne redémarre pas à chaque instantané réseau.
+    private bool _confirmCueActive;
+    private bool _confirmCueAnimated;
     private LobbyStatus _lastLobbyStatus = LobbyStatus.Open;
     // L'état précédent sert à animer seulement les nouvelles cartes ou phases.
     private GamePhase? _lastRenderedPhase;
@@ -45,12 +51,20 @@ public partial class MainWindow : Window
         _gloveCursor = GameCursor.Create();
         _refreshTimer.Tick += RefreshTimer_Tick;
         _noticeTimer.Tick += (_, _) => HideNotice();
-        _heistOutcomeTimer.Tick += (_, _) => HideHeistOutcome();
         _roundTransitionTimer.Tick += (_, _) => HideRoundTransition();
         _dragHeartbeatTimer.Tick += (_, _) => PublishDragPosition();
         OutcomeGoldImage.Source = ResultCardVisuals.GoldFace;
         OutcomeAlarmImage.Source = ResultCardVisuals.AlarmFace;
+        TableSurface.SizeChanged += (_, _) => PositionHostActions();
         PopulateRulesCard();
+    }
+
+    /// <summary>Garde la commande de l'hôte hors des cartes de résultat sur un plateau étroit.</summary>
+    private void PositionHostActions()
+    {
+        var compact = TableSurface.ActualWidth < 1000;
+        HostActions.HorizontalAlignment = compact ? HorizontalAlignment.Right : HorizontalAlignment.Center;
+        HostActions.Margin = compact ? new Thickness(0, 0, 12, 0) : new Thickness(0, 0, 400, 12);
     }
 
     /// <summary>Affiche le gant dans le jeu actif et libère le curseur système en dehors.</summary>
@@ -118,8 +132,17 @@ public partial class MainWindow : Window
     private void FullScreenMode_Click(object sender, RoutedEventArgs e) => SetFullScreen(true);
 
     /// <summary>Active ou réduit les mouvements décoratifs sans toucher à la partie.</summary>
-    private void AnimationsOn_Click(object sender, RoutedEventArgs e) => TableVisuals.AnimationsEnabled = true;
-    private void AnimationsOff_Click(object sender, RoutedEventArgs e) => TableVisuals.AnimationsEnabled = false;
+    private void AnimationsOn_Click(object sender, RoutedEventArgs e)
+    {
+        TableVisuals.AnimationsEnabled = true;
+        UpdateConfirmCue(GamePanel.Visibility == Visibility.Visible && ConfirmButton.IsEnabled);
+    }
+
+    private void AnimationsOff_Click(object sender, RoutedEventArgs e)
+    {
+        TableVisuals.AnimationsEnabled = false;
+        UpdateConfirmCue(GamePanel.Visibility == Visibility.Visible && ConfirmButton.IsEnabled);
+    }
 
     /// <summary>F11 active le plein écran ; Échap en sort.</summary>
     private void Window_KeyDown(object sender, KeyEventArgs e)
@@ -312,8 +335,10 @@ public partial class MainWindow : Window
         LobbyPanel.Visibility = Visibility.Collapsed;
         GamePanel.Visibility = Visibility.Visible;
         _refreshTimer.Interval = TimeSpan.FromMilliseconds(500);
-        if (game.HeistNumber != _lastHeistNumber)
+        var newHeist = game.HeistNumber != _lastHeistNumber;
+        if (newHeist)
         {
+            StopCardDeal();
             HideHeistOutcome();
             HideRoundTransition();
             _lastHeistNumber = game.HeistNumber;
@@ -323,9 +348,17 @@ public partial class MainWindow : Window
             ChipFlightCanvas.Children.Clear();
             _remoteDragVisuals.Clear();
         }
+        // Préparer les emplacements cachés avant de construire les places du nouveau braquage.
+        if (newHeist && game.Phase == GamePhase.PreFlop && TableVisuals.AnimationsEnabled)
+            PrepareCardDeal(game);
+        else if (_dealingHeistNumber != 0 && game.Phase != GamePhase.PreFlop)
+            StopCardDeal();
 
         GamePhaseText.Text = PhaseLabel(game);
         TablePhaseText.Text = TableMessage(game);
+        // Pendant le choix, le bandeau inférieur donne l'instruction sans masquer les jetons centraux.
+        TablePhaseText.Visibility = game.Phase is GamePhase.PreFlop or GamePhase.Flop or
+            GamePhase.Turn or GamePhase.River ? Visibility.Collapsed : Visibility.Visible;
         var phaseChanged = _lastRenderedPhase != game.Phase;
         if (phaseChanged)
         {
@@ -337,7 +370,12 @@ public partial class MainWindow : Window
         RenderCommunityCards(game);
         _visibleTokenSources.Clear();
         RenderSeats(game, identity.PlayerId, identity.Lobby.HostId);
+        if (newHeist && _dealingHeistNumber == game.HeistNumber)
+            StartCardDeal(game, identity.PlayerId);
         RenderTokenBank(game, phaseChanged);
+        if (_draggedTokenValue is { } draggedValue &&
+            _visibleTokenSources.TryGetValue(draggedValue, out var movingSource))
+            movingSource.Opacity = 0.25;
         RenderRemoteDrags(game, identity.PlayerId);
         RenderHistory(game);
         RenderShowdownResults(game);
@@ -373,6 +411,7 @@ public partial class MainWindow : Window
     private void RenderSeats(GameSnapshot game, Guid selfId, Guid hostId)
     {
         SeatsCanvas.Children.Clear();
+        _seatCardVisuals.Clear();
         _seatCenters.Clear();
         _selfSeat = null;
         var players = game.Players.ToArray();
@@ -396,7 +435,8 @@ public partial class MainWindow : Window
                 {
                     _visibleTokenSources[value] = chip;
                     EnableChipDrag(chip, value, player.Id, game.Phase, !game.AllChoicesConfirmed);
-                });
+                }, _dealtCardCounts.GetValueOrDefault(player.Id, 2),
+                (card, index) => _seatCardVisuals[(player.Id, index)] = card);
             Canvas.SetLeft(seat, position.X);
             Canvas.SetTop(seat, position.Y);
             SeatsCanvas.Children.Add(seat);
@@ -423,8 +463,7 @@ public partial class MainWindow : Window
                 Text = TableVisuals.ColorName(colors[index])[..1],
                 Foreground = new SolidColorBrush(Color.FromRgb(236, 204, 140)),
                 FontWeight = FontWeights.Bold,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                ToolTip = $"Tour {index + 1} : jeton {TableVisuals.ColorName(colors[index]).ToLowerInvariant()}"
+                HorizontalAlignment = HorizontalAlignment.Center
             };
             Grid.SetColumn(label, index + 1);
             header.Children.Add(label);
@@ -442,8 +481,7 @@ public partial class MainWindow : Window
                 Foreground = Brushes.White,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                ToolTip = player.Name
+                TextTrimming = TextTrimming.CharacterEllipsis
             });
             for (var index = 0; index < colors.Length; index++)
             {
@@ -474,20 +512,48 @@ public partial class MainWindow : Window
     private void RenderControls(GameSnapshot game, Guid selfId)
     {
         var choosing = game.Phase is GamePhase.PreFlop or GamePhase.Flop or GamePhase.Turn or GamePhase.River;
+        _availableDebrief = game.Phase is GamePhase.HeistComplete or GamePhase.Finished &&
+            game.RevealedHands.Count == game.Players.Count ? game : null;
+        ReviewHeistButton.Visibility = _availableDebrief is null ? Visibility.Collapsed : Visibility.Visible;
         var self = game.Players.First(player => player.Id == selfId);
-        TokenActions.Visibility = choosing ? Visibility.Visible : Visibility.Collapsed;
-        FooterPhaseHint.Visibility = choosing ? Visibility.Collapsed : Visibility.Visible;
-        FooterPhaseHint.Text = game.Phase switch
+        var choicesComplete = choosing && game.AllChoicesConfirmed;
+        TokenActions.Visibility = choosing && !choicesComplete ? Visibility.Visible : Visibility.Collapsed;
+        TokenActionWheel.Visibility = choosing && !choicesComplete &&
+            RoundTransitionOverlay.Visibility != Visibility.Visible
+            ? Visibility.Visible : Visibility.Collapsed;
+        FooterPhaseHint.Visibility = choosing && !choicesComplete ? Visibility.Collapsed : Visibility.Visible;
+        FooterPhaseHint.Text = choicesComplete
+            ? _session!.IsHost ? "CHOIX CONFIRMÉS · CONTINUEZ AVEC LA ROUE PRÈS DE VOTRE MAIN"
+                : "CHOIX CONFIRMÉS · L'HÔTE VA POURSUIVRE"
+            : game.Phase switch
         {
             GamePhase.Showdown => "RÉVÉLATION DES MAINS · ORDRE DES JETONS ROUGES",
-            GamePhase.HeistComplete => "BRAQUAGE TERMINÉ · PRÉPAREZ LE SUIVANT",
+            GamePhase.HeistComplete => "BRAQUAGE TERMINÉ · L'HÔTE PEUT LANCER LE SUIVANT",
             GamePhase.Finished => "PARTIE TERMINÉE",
             _ => string.Empty
         };
         ReturnTokenButton.IsEnabled = choosing && self.CurrentToken.HasValue && !game.AllChoicesConfirmed;
         ConfirmButton.IsEnabled = choosing && game.AllPlayersHaveTokens && !self.IsChoiceConfirmed;
+        UpdateConfirmCue(ConfirmButton.IsEnabled);
         WithdrawButton.IsEnabled = choosing && self.IsChoiceConfirmed;
+        TokenActionHint.Text = self.IsChoiceConfirmed ? "CHOIX CONFIRMÉ · EN ATTENTE DES AUTRES"
+            : game.AllPlayersHaveTokens ? "TOUS LES JETONS SONT POSÉS · CONFIRMEZ VOTRE CHOIX"
+            : "JETONS AU CENTRE · GLISSEZ VERS VOTRE MAIN";
 
+        // Le centre de la roue nomme l'étape précise que son clic va déclencher.
+        var (verb, title) = game.Phase switch
+        {
+            GamePhase.PreFlop => ("DÉVOILER", "LE FLOP"),
+            GamePhase.Flop => ("DÉVOILER", "LE TURN"),
+            GamePhase.Turn => ("DÉVOILER", "LA RIVER"),
+            GamePhase.River => ("PASSER À", "LA RÉVÉLATION"),
+            _ => ("CONTINUER", "LA PARTIE")
+        };
+        AdvanceWheelVerb.Text = verb;
+        AdvanceWheelTitle.Text = title;
+        AutomationProperties.SetName(AdvanceButton, $"{verb} {title}");
+        NextHeistTitle.Text = $"BRAQUAGE {game.HeistNumber + 1}";
+        AutomationProperties.SetName(NextHeistButton, $"Lancer le braquage {game.HeistNumber + 1}");
         AdvanceButton.Visibility = choosing && game.AllChoicesConfirmed ? Visibility.Visible : Visibility.Collapsed;
         RevealButton.Visibility = game.Phase == GamePhase.Showdown && game.NextPlayerToRevealId is not null
             ? Visibility.Visible : Visibility.Collapsed;
@@ -497,12 +563,35 @@ public partial class MainWindow : Window
         var hostCanAct = _session!.IsHost && (AdvanceButton.Visibility == Visibility.Visible ||
             RevealButton.Visibility == Visibility.Visible || ResolveButton.Visibility == Visibility.Visible ||
             NextHeistButton.Visibility == Visibility.Visible);
-        HostActions.Visibility = hostCanAct ? Visibility.Visible : Visibility.Collapsed;
-        FooterHostHint.Visibility = hostCanAct ? Visibility.Collapsed : Visibility.Visible;
-        FooterHostHint.Text = _session.IsHost && choosing
-            ? "En attente de la confirmation de tous les joueurs."
-            : game.Phase == GamePhase.Finished ? "La partie est terminée."
-            : "L'hôte lancera la prochaine étape quand la table sera prête.";
+        _hostActionAvailable = hostCanAct;
+        HostActions.Visibility = hostCanAct && RoundTransitionOverlay.Visibility != Visibility.Visible
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Fait pulser le contour de Confirmer dès que tous les jetons sont posés.</summary>
+    private void UpdateConfirmCue(bool canConfirm)
+    {
+        if (!canConfirm)
+        {
+            ConfirmCueRing.BeginAnimation(OpacityProperty, null);
+            ConfirmCueRing.Opacity = 0;
+            _confirmCueActive = _confirmCueAnimated = false;
+            return;
+        }
+
+        if (_confirmCueActive && _confirmCueAnimated == TableVisuals.AnimationsEnabled) return;
+        ConfirmCueRing.BeginAnimation(OpacityProperty, null);
+        _confirmCueActive = true;
+        _confirmCueAnimated = TableVisuals.AnimationsEnabled;
+        if (_confirmCueAnimated)
+            ConfirmCueRing.BeginAnimation(OpacityProperty,
+                new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(850))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever
+                });
+        else
+            ConfirmCueRing.Opacity = 0.75;
     }
 
     /// <summary>Nom lisible du tour dans le bandeau du plateau.</summary>
@@ -533,7 +622,7 @@ public partial class MainWindow : Window
             return "La partie est terminée. Merci d'avoir joué !";
         return game.AllChoicesConfirmed ? "Tous les choix sont confirmés. L'hôte peut révéler le tour suivant." :
             game.AllPlayersHaveTokens ? "Chaque joueur possède un jeton : confirmez votre choix." :
-            "Choisissez ou reprenez un jeton. Les cartes des autres restent cachées.";
+            "Prenez un jeton au centre ou reprenez celui d'un autre joueur.";
     }
 
     /// <summary>Transmet une commande à l'hôte puis affiche le nouvel état autorisé.</summary>
@@ -546,8 +635,11 @@ public partial class MainWindow : Window
 
     private async void ReturnToken_Click(object sender, RoutedEventArgs e) =>
         await RunAsync(() => ApplyAsync(GameAction.ReturnToken), showProgress: false);
-    private async void Confirm_Click(object sender, RoutedEventArgs e) =>
+    private async void Confirm_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateConfirmCue(false);
         await RunAsync(() => ApplyAsync(GameAction.ConfirmChoice), showProgress: false);
+    }
     private async void Withdraw_Click(object sender, RoutedEventArgs e) =>
         await RunAsync(() => ApplyAsync(GameAction.WithdrawConfirmation), showProgress: false);
     private async void Advance_Click(object sender, RoutedEventArgs e) =>
@@ -565,6 +657,7 @@ public partial class MainWindow : Window
         if (_busy) return;
         _busy = true;
         CreateButton.IsEnabled = JoinButton.IsEnabled = StartButton.IsEnabled = false;
+        HostActions.IsEnabled = false;
         try
         {
             _connectionWarning = false;
@@ -582,6 +675,7 @@ public partial class MainWindow : Window
         {
             _busy = false;
             CreateButton.IsEnabled = JoinButton.IsEnabled = true;
+            HostActions.IsEnabled = true;
             if (_session is { IsHost: true } && LobbyPanel.Visibility == Visibility.Visible)
                 StartButton.IsEnabled = PlayersList.Items.Count >= 3;
         }
@@ -600,8 +694,12 @@ public partial class MainWindow : Window
     private async Task ReturnToMenuAsync(string message)
     {
         if (_draggedTokenValue is not null) EndChipDrag();
+        StopCardDeal();
         HideHeistOutcome();
+        _hostActionAvailable = false;
         HideRoundTransition();
+        TokenActionWheel.Visibility = Visibility.Collapsed;
+        UpdateConfirmCue(false);
         CloseRulesCard();
         SettingsOverlay.Visibility = Visibility.Collapsed;
         await CloseSessionAsync();
@@ -624,6 +722,8 @@ public partial class MainWindow : Window
         _lastSeenEventSequence = 0;
         _lastShowdownRevealCount = -1;
         ShowdownRowsPanel.Children.Clear();
+        _availableDebrief = null;
+        ReviewHeistButton.Visibility = Visibility.Collapsed;
         ShowdownResultsPanel.Visibility = HistorySubheading.Visibility = Visibility.Collapsed;
         ActivityPanel.Visibility = Visibility.Visible;
         _visibleHands.Clear();
@@ -671,11 +771,11 @@ public partial class MainWindow : Window
     /// <summary>Notifie le serveur du départ avant de fermer l'application.</summary>
     protected override void OnClosed(EventArgs e)
     {
+        StopCardDeal();
         if (Mouse.OverrideCursor == _gloveCursor) Mouse.OverrideCursor = null;
         _refreshTimer.Stop();
         _dragHeartbeatTimer.Stop();
         _noticeTimer.Stop();
-        _heistOutcomeTimer.Stop();
         _roundTransitionTimer.Stop();
         var session = _session;
         _session = null;

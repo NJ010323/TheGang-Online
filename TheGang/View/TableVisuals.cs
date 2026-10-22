@@ -41,11 +41,11 @@ internal static class TableVisuals
     /// <summary>Positions des adversaires autour de la moitié haute de la table, pour trois à six joueurs.</summary>
     public static IReadOnlyList<Point> OpponentPositions(int count) => count switch
     {
-        2 => [new Point(320, 125), new Point(750, 125)],
-        3 => [new Point(125, 280), new Point(535, 105), new Point(945, 280)],
-        4 => [new Point(125, 355), new Point(345, 115), new Point(725, 115), new Point(945, 355)],
-        5 => [new Point(110, 370), new Point(275, 135), new Point(535, 85),
-              new Point(795, 135), new Point(960, 370)],
+        2 => [new Point(320, 95), new Point(750, 95)],
+        3 => [new Point(125, 280), new Point(535, 90), new Point(945, 280)],
+        4 => [new Point(125, 355), new Point(345, 95), new Point(725, 95), new Point(945, 355)],
+        5 => [new Point(110, 370), new Point(275, 95), new Point(535, 85),
+              new Point(795, 95), new Point(960, 370)],
         _ => throw new ArgumentOutOfRangeException(nameof(count))
     };
 
@@ -59,8 +59,7 @@ internal static class TableVisuals
                 Width = width,
                 Height = height,
                 Stretch = Stretch.Fill,
-                Margin = new Thickness(3),
-                ToolTip = "Carte cachée"
+                Margin = new Thickness(3)
             };
         return PlayingCardVisuals.Face(card, width, height);
     }
@@ -141,7 +140,6 @@ internal static class TableVisuals
             IsHitTestVisible = false
         });
         chip.Children.Add(NumberShape(value, size));
-        chip.ToolTip = $"Jeton {ColorName(color)} numéro {value}";
         return chip;
     }
 
@@ -177,7 +175,8 @@ internal static class TableVisuals
     /// <summary>Construit une place avec nom, deux cartes, jeton et état de confirmation.</summary>
     public static Border Seat(PlayerSnapshot player, bool isSelf, bool isHost,
         bool isNextToReveal, GamePhase phase, TokenColors roundColor,
-        Action<FrameworkElement, int>? onTokenCreated = null)
+        Action<FrameworkElement, int>? onTokenCreated = null, int shownCardCount = 2,
+        Action<FrameworkElement, int>? onCardCreated = null)
     {
         var frame = new Border
         {
@@ -202,7 +201,12 @@ internal static class TableVisuals
         });
         var cardRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
         for (var index = 0; index < 2; index++)
-            cardRow.Children.Add(Card(player.Hand.Count > index ? player.Hand[index] : null, 46, 66));
+        {
+            var card = Card(player.Hand.Count > index ? player.Hand[index] : null, 46, 66);
+            card.Opacity = index < shownCardCount ? 1 : 0;
+            cardRow.Children.Add(card);
+            onCardCreated?.Invoke(card, index);
+        }
         if (player.CurrentToken is { } token)
         {
             var tokenVisual = Chip(token, roundColor, 40);
@@ -249,8 +253,7 @@ internal static class TableVisuals
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(3),
             Padding = new Thickness(5, 2, 5, 2),
-            Child = statusContents,
-            ToolTip = statusText
+            Child = statusContents
         });
         var progress = new StackPanel
         {
@@ -275,17 +278,13 @@ internal static class TableVisuals
                     TokenColors.Yellow => Brushes.Gold,
                     TokenColors.Orange => Brushes.DarkOrange,
                     _ => Brushes.IndianRed
-                },
-                ToolTip = signal is null ? $"Jeton {ColorName(color)} non choisi" :
-                    $"Jeton {ColorName(color)} : {signal.Value}"
+                }
             });
         }
         Grid.SetColumn(progress, 1);
         statusRow.Children.Add(progress);
         content.Children.Add(statusRow);
         frame.Child = content;
-        frame.ToolTip = player.Signals.Count == 0 ? "Aucun tour confirmé" :
-            string.Join("  •  ", player.Signals.Select(signal => $"{ColorName(signal.Color)} : {signal.Value}"));
         if (isNextToReveal) Pulse(frame);
         return frame;
     }

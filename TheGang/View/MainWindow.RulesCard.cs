@@ -96,7 +96,7 @@ public partial class MainWindow
         // Marges resserrées : les dix exemples conservent des cartes lisibles sur une seule page.
         var row = new Grid { Margin = new Thickness(0, 0, 0, 1) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(25) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(270) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.Children.Add(new TextBlock
         {
@@ -109,8 +109,8 @@ public partial class MainWindow
         var illustration = new StackPanel { Orientation = Orientation.Horizontal };
         foreach (var (rank, suit) in cards)
         {
-            var card = TableVisuals.Card(new CardSnapshot(suit, rank), 42, 52);
-            card.Margin = new Thickness(1);
+            var card = TableVisuals.Card(new CardSnapshot(suit, rank), 52, 57);
+            card.Margin = new Thickness(1, 0, 1, 1);
             illustration.Children.Add(card);
         }
         Grid.SetColumn(illustration, 1);

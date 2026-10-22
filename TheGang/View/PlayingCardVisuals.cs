@@ -51,8 +51,7 @@ internal static class PlayingCardVisuals
             {
                 Color = Colors.Black, BlurRadius = 4, ShadowDepth = 1, Opacity = 0.22
             } : null,
-            Child = new Viewbox { Stretch = Stretch.Fill, Child = art },
-            ToolTip = $"{RankName(card.Rank)} de {SuitName(card.Suit)}"
+            Child = new Viewbox { Stretch = Stretch.Fill, Child = art }
         };
     }
 
@@ -216,17 +215,6 @@ internal static class PlayingCardVisuals
         CardColors.Carreau => ("♦", Red),
         CardColors.Pique => ("♠", Black),
         _ => ("♣", Black)
-    };
-
-    private static string RankName(int rank) => rank switch
-    {
-        1 => "As", 11 => "Valet", 12 => "Dame", 13 => "Roi", _ => rank.ToString()
-    };
-
-    private static string SuitName(CardColors suit) => suit switch
-    {
-        CardColors.Coeur => "cœur", CardColors.Carreau => "carreau",
-        CardColors.Pique => "pique", _ => "trèfle"
     };
 
     private static Brush Brush(string hex) => new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));

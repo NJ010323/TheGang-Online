@@ -6,6 +6,7 @@ namespace View;
 /// <summary>Affiche les trois chances d'obtenir l'or et les trois alarmes possibles.</summary>
 public partial class MainWindow
 {
+    // Nombre de cartes déjà retournées localement et score attendu selon le serveur.
     private int _shownGoldCards;
     private int _shownAlarmCards;
     private int _targetGoldCards;
@@ -20,10 +21,8 @@ public partial class MainWindow
 
         _targetGoldCards = Math.Clamp(game.SuccessfulHeists, 0, 3);
         _targetAlarmCards = Math.Clamp(game.FailedHeists, 0, 3);
-        GoldCountText.Text = $"OR  {_targetGoldCards}/3";
-        AlarmCountText.Text = $"ALARMES  {_targetAlarmCards}/3";
 
-        // Le panneau de résultat couvre le haut de l'écran : retourner les cartes après sa fermeture.
+        // Le débrief recouvre le tapis : retourner les cartes après sa fermeture.
         if (HeistOutcomeOverlay.Visibility == Visibility.Collapsed) FlipPendingScoreCards();
     }
 
@@ -47,11 +46,9 @@ public partial class MainWindow
         AlarmResultCardsPanel.Children.Clear();
         for (var index = 0; index < 3; index++)
         {
-            GoldResultCardsPanel.Children.Add(ResultCardVisuals.Slot(gold: true, index + 1));
-            AlarmResultCardsPanel.Children.Add(ResultCardVisuals.Slot(gold: false, index + 1));
+            GoldResultCardsPanel.Children.Add(ResultCardVisuals.Slot(gold: true));
+            AlarmResultCardsPanel.Children.Add(ResultCardVisuals.Slot(gold: false));
         }
         _shownGoldCards = _shownAlarmCards = _targetGoldCards = _targetAlarmCards = 0;
-        GoldCountText.Text = "OR  0/3";
-        AlarmCountText.Text = "ALARMES  0/3";
     }
 }

@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Threading;
 using Model.Game;
 using Network;
 
@@ -10,9 +9,6 @@ namespace View;
 /// <summary>Présente à toute la table l'issue d'un braquage reçue du serveur.</summary>
 public partial class MainWindow
 {
-    // Les résultats intermédiaires laissent ensuite place au prochain braquage.
-    private readonly DispatcherTimer _heistOutcomeTimer = new() { Interval = TimeSpan.FromSeconds(8) };
-
     /// <summary>Affiche une carte de résultat ; seul le troisième succès ouvre le coffre.</summary>
     private void ShowHeistOutcome(GameEventSnapshot action, GameSnapshot game)
     {
@@ -33,7 +29,7 @@ public partial class MainWindow
                 $"carte{(3 - game.SuccessfulHeists > 1 ? "s" : string.Empty)} d'or pour ouvrir le coffre.",
             _ => "L'ordre des mains est incorrect. Une alarme s'ajoute à la partie."
         };
-        OutcomeScore.Text = $"OR  {game.SuccessfulHeists}/3    ·    ALARMES  {game.FailedHeists}/3";
+        PopulateHeistDebrief(game);
         OutcomeTitle.Foreground = succeeded
             ? new SolidColorBrush(Color.FromRgb(248, 209, 115))
             : new SolidColorBrush(Color.FromRgb(255, 137, 122));
@@ -71,8 +67,7 @@ public partial class MainWindow
             OutcomeAlarmGlow.Opacity = 0.7;
         }
 
-        // La fin de partie reste à l'écran jusqu'au choix explicite du joueur.
-        if (game.Phase != GamePhase.Finished) _heistOutcomeTimer.Start();
+        // Le débrief reste lisible jusqu'au choix explicite du joueur.
     }
 
     /// <summary>Anime la carte de la manche ou l'ouverture du coffre lors de la victoire globale.</summary>
@@ -133,7 +128,6 @@ public partial class MainWindow
     /// <summary>Libère le plateau et remet les sprites dans leur état initial pour le prochain résultat.</summary>
     private void HideHeistOutcome()
     {
-        _heistOutcomeTimer.Stop();
         HeistOutcomeOverlay.Visibility = Visibility.Collapsed;
         OutcomeCard.BeginAnimation(UIElement.OpacityProperty, null);
         OutcomeScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);

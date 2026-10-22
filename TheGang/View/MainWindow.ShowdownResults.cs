@@ -92,7 +92,6 @@ public partial class MainWindow
                 new SolidColorBrush(Color.FromRgb(241, 196, 104)),
             BorderThickness = new Thickness(1),
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = place is null ? "Rang en attente" : $"{place}{(place == 1 ? "re" : "e")} place",
             Child = new TextBlock
             {
                 Text = place?.ToString("00") ?? "—", Foreground =
@@ -110,7 +109,6 @@ public partial class MainWindow
             BorderBrush = new SolidColorBrush(Color.FromRgb(233, 156, 99)),
             BorderThickness = new Thickness(1),
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = $"Jeton rouge {token?.ToString() ?? "?"}",
             Child = new TextBlock
             {
                 Text = token?.ToString() ?? "?", Foreground = Brushes.White,
@@ -126,8 +124,7 @@ public partial class MainWindow
             Text = name, Foreground = Brushes.White,
             FontSize = 12, FontWeight = FontWeights.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = name
+            VerticalAlignment = VerticalAlignment.Center
         };
         Grid.SetColumn(player, 2);
         cells.Children.Add(player);
@@ -136,8 +133,7 @@ public partial class MainWindow
             Text = label, Foreground = new SolidColorBrush(color),
             FontSize = 12, FontWeight = result is null ? FontWeights.Normal : FontWeights.Bold,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = label
+            VerticalAlignment = VerticalAlignment.Center
         };
         Grid.SetColumn(hand, 3);
         cells.Children.Add(hand);
@@ -149,8 +145,7 @@ public partial class MainWindow
             BorderBrush = isNext ? new SolidColorBrush(Color.FromRgb(219, 175, 98)) :
                 new SolidColorBrush(Color.FromRgb(105, 66, 56)),
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(3, 0, 3, 0), Margin = new Thickness(0, 0, 0, 2),
-            ToolTip = $"{(place is null ? "Rang en attente" : $"Rang {place}")} · Jeton rouge {token} · {name} · {label}"
+            Padding = new Thickness(3, 0, 3, 0), Margin = new Thickness(0, 0, 0, 2)
         };
     }
 

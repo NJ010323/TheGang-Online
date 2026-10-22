@@ -9,7 +9,7 @@ namespace View;
 /// <summary>Annonce la fin d'un tour à partir de l'événement partagé par le serveur.</summary>
 public partial class MainWindow
 {
-    // L'annonce ne bloque pas les commandes ; elle disparaît après le retournement des cartes.
+    // L'annonce disparaît après le retournement des cartes, puis rend la roue à l'hôte.
     private readonly DispatcherTimer _roundTransitionTimer = new();
 
     /// <summary>Affiche la prochaine phase et la couleur des jetons rendus disponibles.</summary>
@@ -39,6 +39,8 @@ public partial class MainWindow
         RoundTransitionTitle.Foreground = brush;
         RoundTransitionProgress.Background = brush;
         RoundTransitionOverlay.Visibility = Visibility.Visible;
+        HostActions.Visibility = Visibility.Collapsed;
+        TokenActionWheel.Visibility = Visibility.Collapsed;
 
         if (TableVisuals.AnimationsEnabled)
         {
@@ -76,5 +78,10 @@ public partial class MainWindow
         RoundTransitionOverlay.Opacity = 1;
         RoundTransitionScale.ScaleX = RoundTransitionScale.ScaleY = 1;
         RoundTransitionProgressScale.ScaleX = 1;
+        HostActions.Visibility = _hostActionAvailable && GamePanel.Visibility == Visibility.Visible
+            ? Visibility.Visible : Visibility.Collapsed;
+        TokenActionWheel.Visibility = GamePanel.Visibility == Visibility.Visible &&
+            TokenActions.Visibility == Visibility.Visible
+            ? Visibility.Visible : Visibility.Collapsed;
     }
 }

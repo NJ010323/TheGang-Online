@@ -36,52 +36,57 @@ public partial class MainWindow
     private int _pendingDragUpdates;
     private readonly Dictionary<Guid, RemoteDragVisual> _remoteDragVisuals = [];
 
-    /// <summary>Dispose physiquement les jetons libres ; les emplacements occupés restent visibles.</summary>
+    /// <summary>Pose les jetons libres au centre du tapis ; chacun garde la même place sur tous les clients.</summary>
     private void RenderTokenBank(GameSnapshot game, bool phaseChanged)
     {
         TokenBankPanel.Children.Clear();
         _bankCenters.Clear();
         var choosing = game.Phase is GamePhase.PreFlop or GamePhase.Flop or GamePhase.Turn or GamePhase.River;
-        TokenBankPanel.Visibility = TokenBankTitle.Visibility = choosing ? Visibility.Visible : Visibility.Collapsed;
+        TokenBankPanel.Visibility = choosing ? Visibility.Visible : Visibility.Collapsed;
         if (!choosing) return;
+
         var count = game.Players.Count;
-        var startX = (1280 - count * 70) / 2.0;
-        Canvas.SetLeft(TokenBankPanel, startX);
-        _bankDropArea = new Rect(startX, 498, count * 70, 60);
+        const double chipSize = 72;
+        const double spacing = 82;
+        // La rangée se trouve juste sous les cartes communes, loin de la main et de la roue d'action.
+        const double trayTop = 370;
+        const double trayHeight = 100;
+        var trayWidth = (count - 1) * spacing + 110;
+        var trayLeft = (1280 - trayWidth) / 2;
+        _bankDropArea = new Rect(trayLeft, trayTop, trayWidth, trayHeight);
+
+        // L'ovale discret indique où rendre un jeton, sans intercepter le glisser-déposer.
+        var tray = new Border
+        {
+            Width = trayWidth,
+            Height = trayHeight,
+            CornerRadius = new CornerRadius(trayHeight / 2),
+            Background = new SolidColorBrush(Color.FromArgb(55, 29, 13, 17)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(125, 174, 130, 67)),
+            BorderThickness = new Thickness(1.5),
+            IsHitTestVisible = false
+        };
+        Canvas.SetLeft(tray, trayLeft);
+        Canvas.SetTop(tray, trayTop);
+        TokenBankPanel.Children.Add(tray);
+
         var available = game.AvailableTokens.ToHashSet();
         for (var value = 1; value <= count; value++)
         {
-            var slot = new Grid { Width = 70, Height = 58 };
-            _bankCenters[value] = new Point(startX + (value - 1) * 70 + 35, 535);
-            if (available.Contains(value))
-            {
-                var chip = TableVisuals.Chip(value, TableVisuals.RoundColor(game.Phase), 52);
-                slot.Children.Add(chip);
-                _visibleTokenSources[value] = chip;
-                EnableChipDrag(chip, value, null, game.Phase, !game.AllChoicesConfirmed);
-                if (phaseChanged) TableVisuals.Reveal(chip);
-            }
-            else
-            {
-                slot.Children.Add(new Border
-                {
-                    Width = 48,
-                    Height = 48,
-                    CornerRadius = new CornerRadius(24),
-                    Background = new SolidColorBrush(Color.FromArgb(100, 15, 10, 11)),
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(135, 100, 59)),
-                    BorderThickness = new Thickness(1),
-                    Child = new TextBlock
-                    {
-                        Text = value.ToString(),
-                        Foreground = new SolidColorBrush(Color.FromRgb(152, 121, 83)),
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center
-                    },
-                    ToolTip = $"Jeton {value} déjà pris"
-                });
-            }
-            TokenBankPanel.Children.Add(slot);
+            var offset = value - 1 - (count - 1) / 2.0;
+            var centerX = 640 + offset * spacing;
+            var distance = Math.Abs(offset) / ((count - 1) / 2.0);
+            var centerY = 410 + 12 * distance * distance;
+            _bankCenters[value] = new Point(centerX, centerY);
+            if (!available.Contains(value)) continue;
+
+            var chip = TableVisuals.Chip(value, TableVisuals.RoundColor(game.Phase), chipSize);
+            Canvas.SetLeft(chip, centerX - chipSize / 2);
+            Canvas.SetTop(chip, centerY - chipSize / 2);
+            TokenBankPanel.Children.Add(chip);
+            _visibleTokenSources[value] = chip;
+            EnableChipDrag(chip, value, null, game.Phase, !game.AllChoicesConfirmed);
+            if (phaseChanged) TableVisuals.Reveal(chip);
         }
     }
 
@@ -217,7 +222,9 @@ public partial class MainWindow
         var onBank = _bankDropArea.Contains(point);
         var fromPlayerId = _draggedFromPlayerId;
         var gestureId = _dragGestureId;
-        EndChipDrag();
+        var acceptedDrop = selfId is not null &&
+            (onHand && fromPlayerId != selfId || onBank && fromPlayerId == selfId);
+        EndChipDrag(keepSourceDimmed: acceptedDrop);
         e.Handled = true;
         if (onHand && selfId is not null && fromPlayerId != selfId)
             await RunAsync(() => ApplyAsync(GameAction.TakeToken, value, gestureId), showProgress: false);
@@ -232,14 +239,18 @@ public partial class MainWindow
     }
 
     /// <summary>Libère la capture même si le joueur annule son geste hors du tapis.</summary>
-    private void EndChipDrag()
+    private void EndChipDrag(bool keepSourceDimmed = false)
     {
+        var value = _draggedTokenValue;
         _dragHeartbeatTimer.Stop();
         PublishDragPosition(isActive: false, force: true);
         _draggedTokenValue = null;
         _dragGestureId = Guid.Empty;
         Mouse.Capture(null);
-        if (_dragSource is not null) _dragSource.Opacity = 1;
+        if (!keepSourceDimmed && _dragSource is not null) _dragSource.Opacity = 1;
+        if (!keepSourceDimmed && value is { } tokenValue &&
+            _visibleTokenSources.TryGetValue(tokenValue, out var currentSource))
+            currentSource.Opacity = 1;
         if (_dragVisual is not null) ChipFlightCanvas.Children.Remove(_dragVisual);
         if (_selfSeat is not null)
         {
