@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Model.Lobby;
 
 namespace Network;
@@ -71,6 +72,12 @@ public sealed class LobbyHttpClient : IDisposable
     public async Task<LobbySnapshot> GetLobbyAsync(CancellationToken cancellationToken = default) =>
         await GetAsync<LobbySnapshot>($"lobbies/{Code}", cancellationToken);
 
+    /// <summary>Modifie le nombre de places d'un lobby ouvert avec l'identité de l'hôte.</summary>
+    public Task<LobbySnapshot> ChangeCapacityAsync(int maxPlayers,
+        CancellationToken cancellationToken = default) =>
+        PostAsync<LobbySnapshot>($"lobbies/{Code}/capacity", cancellationToken,
+            new ChangeLobbyCapacityRequest(maxPlayers));
+
     /// <summary>L'hôte lance la partie après l'arrivée de trois joueurs ou plus.</summary>
     public async Task<GameSnapshot> StartAsync(CancellationToken cancellationToken = default) =>
         await PostAsync<GameSnapshot>($"lobbies/{Code}/start", cancellationToken);
@@ -87,6 +94,36 @@ public sealed class LobbyHttpClient : IDisposable
     /// <summary>Publie la position du jeton tenu sans modifier la partie.</summary>
     public async Task UpdateDragAsync(GameDragRequest drag, CancellationToken cancellationToken = default) =>
         await PostAsync<bool>($"lobbies/{Code}/game/drag", cancellationToken, drag);
+
+    /// <summary>Demande au premier invité de reprendre l'hébergement.</summary>
+    public Task<HostMigrationSnapshot> BeginHostMigrationAsync(CancellationToken cancellationToken = default) =>
+        PostAsync<HostMigrationSnapshot>($"lobbies/{Code}/migration/begin", cancellationToken);
+
+    /// <summary>Accepte ou refuse la relève depuis la session du successeur désigné.</summary>
+    public Task<HostMigrationSnapshot> DecideHostMigrationAsync(HostMigrationDecision decision,
+        CancellationToken cancellationToken = default) =>
+        PostAsync<HostMigrationSnapshot>($"lobbies/{Code}/migration/decision", cancellationToken, decision);
+
+    /// <summary>Publie l'adresse du nouveau tunnel après son démarrage effectif.</summary>
+    public Task<HostMigrationSnapshot> PublishHostMigrationAsync(HostMigrationDestination destination,
+        CancellationToken cancellationToken = default) =>
+        PostAsync<HostMigrationSnapshot>($"lobbies/{Code}/migration/destination", cancellationToken, destination);
+
+    /// <summary>Confirme au serveur sortant que la connexion au successeur fonctionne.</summary>
+    public Task<HostMigrationSnapshot> AcknowledgeHostMigrationAsync(Guid migrationId,
+        CancellationToken cancellationToken = default) =>
+        PostAsync<HostMigrationSnapshot>($"lobbies/{Code}/migration/acknowledge", cancellationToken,
+            new HostMigrationReference(migrationId));
+
+    /// <summary>Libère la partie si la relève échoue avant la publication du nouveau tunnel.</summary>
+    public Task<bool> CancelHostMigrationAsync(Guid migrationId, CancellationToken cancellationToken = default) =>
+        PostAsync<bool>($"lobbies/{Code}/migration/cancel", cancellationToken,
+            new HostMigrationReference(migrationId));
+
+    /// <summary>Configure la nouvelle table avec les joueurs attendus et le score acquis.</summary>
+    public Task<bool> ConfigureHostMigrationAsync(HostMigrationSetup setup,
+        CancellationToken cancellationToken = default) =>
+        PostAsync<bool>($"lobbies/{Code}/migration/configure", cancellationToken, setup);
 
     /// <summary>Quitte le lobby ; un invité en partie garde temporairement sa place.</summary>
     public async Task LeaveAsync(CancellationToken cancellationToken = default)
@@ -154,8 +191,20 @@ public sealed class LobbyHttpClient : IDisposable
         var message = await response.Content.ReadAsStringAsync(cancellationToken);
         if (response.Content.Headers.ContentType?.MediaType == "text/html")
             message = "Le serveur n'a pas répondu correctement.";
-        else if (message.Length > 300)
-            message = message[..300];
+        else if (response.Content.Headers.ContentType?.MediaType == "application/json")
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(message);
+                if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                    document.RootElement.TryGetProperty("error", out var error) &&
+                    error.ValueKind == JsonValueKind.String)
+                    message = error.GetString() ?? message;
+            }
+            catch (JsonException) { /* Une réponse mal formée reste lisible sous forme de texte court. */ }
+        }
+        if (string.IsNullOrWhiteSpace(message)) message = "La requête a échoué.";
+        if (message.Length > 300) message = message[..300];
         throw new HttpRequestException($"{(int)response.StatusCode} : {message}", null, response.StatusCode);
     }
 }

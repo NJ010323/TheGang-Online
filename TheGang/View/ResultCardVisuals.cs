@@ -16,7 +16,7 @@ internal static class ResultCardVisuals
 
     private static BitmapSource Crop(string name, Int32Rect area)
     {
-        var bitmap = new BitmapImage(new Uri($"pack://application:,,,/View;component/Assets/{name}"));
+        var bitmap = new BitmapImage(new Uri($"pack://application:,,,/TheGang;component/Assets/{name}"));
         return new CroppedBitmap(bitmap, area);
     }
 

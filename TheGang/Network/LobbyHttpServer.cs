@@ -77,6 +77,9 @@ public sealed class LobbyHttpServer : IAsyncDisposable
             .RequireRateLimiting("join");
         app.MapGet("/lobbies/{code}", (string code, HttpRequest request) =>
             Respond(() => lobby.GetLobby(code, SessionToken(request))));
+        app.MapPost("/lobbies/{code}/capacity", (string code, HttpRequest request,
+            ChangeLobbyCapacityRequest change) =>
+            Respond(() => lobby.ChangeCapacity(code, SessionToken(request), change.MaxPlayers)));
         app.MapGet("/lobbies/{code}/session", (string code, HttpRequest request) =>
             Respond(() => lobby.Resume(code, SessionToken(request))));
         app.MapPost("/lobbies/{code}/leave", (string code, HttpRequest request) =>
@@ -91,6 +94,23 @@ public sealed class LobbyHttpServer : IAsyncDisposable
         app.MapPost("/lobbies/{code}/game/drag", (string code, HttpRequest request,
             GameDragRequest drag) =>
             Respond(() => lobby.UpdateDrag(code, SessionToken(request), drag)));
+        app.MapPost("/lobbies/{code}/migration/begin", (string code, HttpRequest request) =>
+            Respond(() => lobby.BeginHostMigration(code, SessionToken(request))));
+        app.MapPost("/lobbies/{code}/migration/decision", (string code, HttpRequest request,
+            HostMigrationDecision decision) =>
+            Respond(() => lobby.DecideHostMigration(code, SessionToken(request), decision)));
+        app.MapPost("/lobbies/{code}/migration/destination", (string code, HttpRequest request,
+            HostMigrationDestination destination) =>
+            Respond(() => lobby.PublishHostMigration(code, SessionToken(request), destination)));
+        app.MapPost("/lobbies/{code}/migration/acknowledge", (string code, HttpRequest request,
+            HostMigrationReference reference) =>
+            Respond(() => lobby.AcknowledgeHostMigration(code, SessionToken(request), reference.Id)));
+        app.MapPost("/lobbies/{code}/migration/cancel", (string code, HttpRequest request,
+            HostMigrationReference reference) =>
+            Respond(() => lobby.CancelHostMigration(code, SessionToken(request), reference.Id)));
+        app.MapPost("/lobbies/{code}/migration/configure", (string code, HttpRequest request,
+            HostMigrationSetup setup) =>
+            Respond(() => lobby.ConfigureHostMigration(code, SessionToken(request), setup)));
     }
 
     /// <summary>Lit le secret de session sans accepter d'identifiant de joueur fourni par le client.</summary>

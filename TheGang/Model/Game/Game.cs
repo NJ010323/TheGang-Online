@@ -105,6 +105,27 @@ public class Game
         StartHeist();
     }
 
+    /// <summary>
+    /// Reprend une partie transférée à un autre hôte. Les braquages déjà résolus restent acquis ;
+    /// le braquage interrompu est redistribué car le paquet et les jetons dépendent des joueurs présents.
+    /// Deux joueurs ne sont admis que pour une partie déjà commencée et transférée.
+    /// </summary>
+    public void ContinueAfterHostMigration(int heistNumber, int successfulHeists, int failedHeists)
+    {
+        EnsurePhase(GamePhase.WaitingForPlayers);
+        if (_players.Count is < 2 or > 6)
+            throw new InvalidOperationException("Il faut au moins deux joueurs pour reprendre une partie transférée.");
+        if (successfulHeists is < 0 or > 2 || failedHeists is < 0 or > 2 ||
+            heistNumber != successfulHeists + failedHeists + 1)
+            throw new ArgumentException("Progression de braquage transférée invalide.");
+
+        SuccessfulHeists = successfulHeists;
+        FailedHeists = failedHeists;
+        HeistNumber = heistNumber - 1;
+        LastHeistSucceeded = null;
+        StartHeist();
+    }
+
     /// <summary>Prend un jeton au centre ou à un autre joueur et invalide les confirmations.</summary>
     public void TakeToken(Guid playerId, int value)
     {

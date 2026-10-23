@@ -52,12 +52,22 @@ public sealed class LobbyManager
     public LobbyParticipant JoinLobby(string code, string playerName) =>
         GetLobby(code).Join(playerName);
 
+    /// <summary>Modifie la capacité d'un lobby ouvert à la demande de son hôte.</summary>
+    public void ChangeLobbyCapacity(string code, Guid requesterId, int maxPlayers) =>
+        GetLobby(code).ChangeCapacity(requesterId, maxPlayers);
+
     /// <summary>Retire un invité du lobby avant le début de la partie.</summary>
     public void LeaveLobby(string code, Guid playerId) => GetLobby(code).Leave(playerId);
 
     /// <summary>Lance une partie seulement lorsque l'identifiant de l'hôte est fourni.</summary>
     public Model.Game.Game StartGame(string code, Guid requesterId) =>
         GetLobby(code).Start(requesterId);
+
+    /// <summary>Rétablit les résultats acquis puis redistribue le braquage interrompu.</summary>
+    public Model.Game.Game ContinueAfterHostMigration(string code, Guid requesterId,
+        int heistNumber, int successfulHeists, int failedHeists) =>
+        GetLobby(code).ContinueAfterHostMigration(requesterId, heistNumber,
+            successfulHeists, failedHeists);
 
     /// <summary>Ferme un lobby à la demande de son hôte et libère son code.</summary>
     public void CloseLobby(string code, Guid requesterId)

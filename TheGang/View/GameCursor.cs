@@ -13,7 +13,7 @@ internal static class GameCursor
     public static Cursor Create()
     {
         var source = new BitmapImage(new Uri(
-            "pack://application:,,,/View;component/Assets/wool-glove.png", UriKind.Absolute));
+            "pack://application:,,,/TheGang;component/Assets/wool-glove.png", UriKind.Absolute));
         const int size = 64;
         var drawing = new DrawingVisual();
         using (var context = drawing.RenderOpen())

@@ -121,6 +121,18 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Appel à prendre la relève : même cadre que les commandes de table, avec un accent d'or. -->
+        <Style x:Key="MigrationAcceptButton" TargetType="Button" BasedOn="{StaticResource TableActionButton}">
+            <Setter Property="Width" Value="218" />
+            <Setter Property="Height" Value="60" />
+            <Setter Property="FontFamily" Value="Georgia" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#F0B65D" BlurRadius="15" ShadowDepth="0" Opacity="0.38" />
+                </Setter.Value>
+            </Setter>
+        </Style>
         <!-- Trois arcs de 120° : une seule roue avec des cibles qui épousent chaque secteur. -->
         <PathGeometry x:Key="ConfirmWheelSector" Figures="M 21.7,59 A 102,102 0 0 1 198.3,59 L 147.2,88.5 A 43,43 0 0 0 72.8,88.5 Z" />
         <PathGeometry x:Key="ReturnWheelSector" Figures="M 110,212 A 102,102 0 0 1 21.7,59 L 72.8,88.5 A 43,43 0 0 0 110,153 Z" />
@@ -311,6 +323,9 @@
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="ChoiceFrame" Property="BorderBrush" Value="White" />
                             </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ChoiceFrame" Property="Opacity" Value="0.35" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -448,7 +463,39 @@
                     <TextBlock Text="SALON DE JEU" Foreground="#E6BF69" FontWeight="Bold" FontSize="14" />
                     <TextBlock Text="En attente des joueurs" FontSize="36" FontFamily="Georgia"
                                FontWeight="Bold" Margin="0,10,0,20" />
-                    <TextBlock x:Name="LobbyDetails" FontSize="18" Foreground="#E7D6B9" Margin="0,0,0,22" />
+                    <TextBlock x:Name="LobbyDetails" FontSize="18" Foreground="#E7D6B9"
+                               TextWrapping="Wrap" Margin="0,0,0,14" />
+                    <Border x:Name="LobbyCapacityPanel" Visibility="Collapsed" Margin="0,0,0,20"
+                            Padding="14,12" Background="#D91C1414" BorderBrush="#A8844C"
+                            BorderThickness="1" CornerRadius="11">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
+                                <TextBlock Text="PLACES À LA TABLE" Foreground="#F0C86A"
+                                           FontSize="14" FontWeight="Bold" />
+                                <TextBlock Text="Modifiables avant la distribution"
+                                           Foreground="#C6B49B" FontSize="12" Margin="0,4,0,0" />
+                            </StackPanel>
+                            <UniformGrid Grid.Column="1" Width="224" Rows="1" Columns="4"
+                                         HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <RadioButton x:Name="LobbyPlayers3Option" Content="3" Tag="3"
+                                             GroupName="OpenLobbyCapacity" Style="{StaticResource SelectionChoice}"
+                                             Click="LobbyCapacity_Click" />
+                                <RadioButton x:Name="LobbyPlayers4Option" Content="4" Tag="4"
+                                             GroupName="OpenLobbyCapacity" Style="{StaticResource SelectionChoice}"
+                                             Click="LobbyCapacity_Click" />
+                                <RadioButton x:Name="LobbyPlayers5Option" Content="5" Tag="5"
+                                             GroupName="OpenLobbyCapacity" Style="{StaticResource SelectionChoice}"
+                                             Click="LobbyCapacity_Click" />
+                                <RadioButton x:Name="LobbyPlayers6Option" Content="6" Tag="6"
+                                             GroupName="OpenLobbyCapacity" Style="{StaticResource SelectionChoice}"
+                                             Click="LobbyCapacity_Click" />
+                            </UniformGrid>
+                        </Grid>
+                    </Border>
                     <TextBlock Text="INVITATION À PARTAGER" Foreground="#E6BF69" FontWeight="Bold" />
                     <TextBox x:Name="InvitationOutput" Style="{StaticResource EntryBox}" IsReadOnly="True" />
                     <WrapPanel>
@@ -1081,12 +1128,12 @@
                     VerticalAlignment="Center" Background="#271A1C" BorderBrush="#E0AC62"
                     BorderThickness="2" CornerRadius="15">
                 <StackPanel>
-                    <TextBlock Text="◈  PARTIE EN PAUSE  ◈" FontFamily="Georgia" FontSize="28"
+                    <TextBlock x:Name="PausedTitleText" Text="◈  PARTIE EN PAUSE  ◈" FontFamily="Georgia" FontSize="28"
                                FontWeight="Bold" Foreground="#F5D17B" TextAlignment="Center" />
                     <Border Height="1" Background="#9B7144" Margin="18,18" />
                     <TextBlock x:Name="PausedPlayerText" FontSize="19" FontWeight="SemiBold"
                                Foreground="#FFF0D8" TextAlignment="Center" TextWrapping="Wrap" />
-                    <TextBlock Text="Les cartes et les jetons restent en place. La partie reprendra dès son retour."
+                    <TextBlock x:Name="PausedExplanationText" Text="Les cartes et les jetons restent en place. La partie reprendra dès son retour."
                                FontSize="15" Foreground="#D7C8B1" TextAlignment="Center"
                                TextWrapping="Wrap" Margin="15,14,15,8" />
                     <TextBlock x:Name="PauseDeadlineText" FontSize="15" Foreground="#F1C777"
@@ -1126,6 +1173,63 @@
                                 Style="{StaticResource TableDangerButton}" Width="190" Margin="0"
                                 Click="ConfirmExit_Click" />
                     </StackPanel>
+                    <Button x:Name="ForceExitButton" Content="Quitter sans relève"
+                            Style="{StaticResource QuietButton}" HorizontalAlignment="Center"
+                            Margin="0,16,0,0" Visibility="Collapsed" Click="ForceExit_Click" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Le successeur peut refuser : aucun tunnel n'est remplacé avant son accord. -->
+        <Grid x:Name="MigrationOfferOverlay" Grid.RowSpan="2" Panel.ZIndex="76"
+              Visibility="Collapsed" Background="#E6090709">
+            <Border Width="600" Padding="32,28" Margin="18" HorizontalAlignment="Center"
+                    VerticalAlignment="Center" Background="#281B1D" BorderBrush="#D7A85E"
+                    BorderThickness="2" CornerRadius="16">
+                <StackPanel>
+                    <TextBlock Text="THE GANG  ·  RELÈVE DE L'ÉQUIPE" Foreground="#D7A85E"
+                               FontSize="13" FontWeight="Bold" TextAlignment="Center" />
+                    <TextBlock Text="PRENDRE LA RELÈVE ?" FontFamily="Georgia" FontSize="29"
+                               FontWeight="Bold" Foreground="#F5D17B" TextAlignment="Center"
+                               Margin="0,16,0,0" />
+                    <Border Height="1" Background="#957047" Margin="36,18" />
+                    <TextBlock x:Name="MigrationOfferText" Foreground="#FFF0D8" FontSize="17"
+                               TextAlignment="Center" TextWrapping="Wrap" Margin="4,0,4,16" />
+                    <TextBlock x:Name="MigrationOfferExplanation" Text="Le braquage en cours sera redistribué. Les cartes d'or et les alarmes déjà obtenues seront conservées."
+                               Foreground="#D6C4AD" FontSize="14" TextAlignment="Center"
+                               TextWrapping="Wrap" Margin="8,0,8,24" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="Refuser" Style="{StaticResource TableButton}"
+                                Width="170" Height="60" Margin="0,0,12,0" Click="DeclineMigration_Click" />
+                        <Button Style="{StaticResource MigrationAcceptButton}" Click="AcceptMigration_Click"
+                                AutomationProperties.Name="Devenir hôte">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="DEVENIR HÔTE" FontSize="16" TextAlignment="Center" />
+                                <TextBlock Text="PRENDRE LA RELÈVE" FontFamily="Segoe UI" FontSize="9"
+                                           FontWeight="SemiBold" TextAlignment="Center"
+                                           Opacity="0.82" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Une étape lisible pendant la création du tunnel et la redirection des invités. -->
+        <Grid x:Name="MigrationProgressOverlay" Grid.RowSpan="2" Panel.ZIndex="77"
+              Visibility="Collapsed" Background="#E6090709">
+            <Border Width="590" Padding="32,28" Margin="18" HorizontalAlignment="Center"
+                    VerticalAlignment="Center" Background="#281B1D" BorderBrush="#D7A85E"
+                    BorderThickness="2" CornerRadius="16">
+                <StackPanel>
+                    <TextBlock Text="◈  PASSAGE DE RELAIS  ◈" FontFamily="Georgia" FontSize="28"
+                               FontWeight="Bold" Foreground="#F5D17B" TextAlignment="Center" />
+                    <Border Height="1" Background="#957047" Margin="36,18" />
+                    <TextBlock x:Name="MigrationProgressText" Foreground="#FFF0D8" FontSize="17"
+                               TextAlignment="Center" TextWrapping="Wrap" Margin="5,0,5,18" />
+                    <Button x:Name="CancelMigrationButton" Content="Annuler la relève"
+                            Style="{StaticResource TableButton}" HorizontalAlignment="Center"
+                            Click="CancelMigration_Click" Visibility="Collapsed" />
                 </StackPanel>
             </Border>
         </Grid>

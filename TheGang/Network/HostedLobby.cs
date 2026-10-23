@@ -31,6 +31,12 @@ public sealed class HostedLobby
     private readonly HashSet<(Guid PlayerId, Guid GestureId)> _completedDrags = [];
     private readonly Queue<(Guid PlayerId, Guid GestureId)> _completedDragOrder = [];
     private const int MaxCompletedDrags = 256;
+    // La relève gèle les commandes du serveur sortant jusqu'à la redirection des joueurs.
+    private HostMigrationSnapshot? _migration;
+    private readonly HashSet<Guid> _migrationAcknowledgements = [];
+    // Les anciens joueurs entrent d'abord ; un lobby encore ouvert peut ensuite accueillir des amis.
+    private HostMigrationSetup? _migrationSetup;
+    private Guid? _returningHostId;
 
     /// <summary>Crée le lobby et l'identité initiale de l'hôte.</summary>
     public HostedLobby(string hostNickname, int maxPlayers, TimeProvider? clock = null)
@@ -59,11 +65,167 @@ public sealed class HostedLobby
             var provided = Encoding.ASCII.GetBytes(invitationSecret ?? string.Empty);
             if (!CryptographicOperations.FixedTimeEquals(expected, provided))
                 throw new UnauthorizedAccessException("Invitation invalide.");
+            if (_migrationSetup is { } setup && !setup.ExpectedPlayers.Contains(nickname.Trim(),
+                    StringComparer.OrdinalIgnoreCase) &&
+                (setup.WasStarted || _lobby.Players.Count < setup.ExpectedPlayers.Count))
+                throw new UnauthorizedAccessException("Ce joueur ne fait pas partie de la table transférée.");
             var player = _manager.JoinLobby(Code, nickname);
             var identity = NewIdentity(player.Id);
             _lastSeenGuests[player.Id] = _clock.GetUtcNow();
+            if (string.Equals(player.Name, _migrationSetup?.ReturningHostName,
+                    StringComparison.OrdinalIgnoreCase))
+                _returningHostId = player.Id;
+            StartTransferredGameWhenReady();
             return identity;
         }
+    }
+
+    /// <summary>Propose la relève au premier invité inscrit dans le lobby.</summary>
+    public HostMigrationSnapshot BeginHostMigration(string code, string sessionToken)
+    {
+        lock (_sync)
+        {
+            var requesterId = EnsureMember(code, sessionToken);
+            EnsureHost(requesterId);
+            EnsureAllPlayersPresent();
+            if (_migration is { Stage: HostMigrationStage.Offered or HostMigrationStage.Preparing or
+                HostMigrationStage.Redirecting })
+                throw new InvalidOperationException("Une relève est déjà en cours.");
+            if (_lobby.Players.Count < 2)
+                throw new InvalidOperationException("Aucun invité ne peut reprendre le rôle d'hôte.");
+            if (_game?.Result is GameResult.Won or GameResult.Lost)
+                throw new InvalidOperationException("Cette partie est déjà terminée.");
+
+            var successor = _lobby.Players[1];
+            var heistNumber = _game is null ? 0 : _game.Phase == GamePhase.HeistComplete
+                ? _game.HeistNumber + 1 : _game.HeistNumber;
+            _migrationAcknowledgements.Clear();
+            _migration = new HostMigrationSnapshot(Guid.NewGuid(), HostMigrationStage.Offered,
+                successor.Id, successor.Name, _clock.GetUtcNow().AddMinutes(2), null,
+                _lobby.Players.Skip(1).Select(player => player.Name).ToArray(), _lobby.MaxPlayers,
+                _game is not null, heistNumber, _game?.SuccessfulHeists ?? 0,
+                _game?.FailedHeists ?? 0, 0, _lobby.Players.Count);
+            CompleteAllGestures();
+            return _migration;
+        }
+    }
+
+    /// <summary>Le successeur accepte ou refuse la responsabilité du nouveau serveur.</summary>
+    public HostMigrationSnapshot DecideHostMigration(string code, string sessionToken,
+        HostMigrationDecision decision)
+    {
+        lock (_sync)
+        {
+            var playerId = EnsureMember(code, sessionToken);
+            var migration = _migration ?? throw new InvalidOperationException("Aucune relève en cours.");
+            if (migration.Id != decision.Id || migration.Stage is not
+                (HostMigrationStage.Offered or HostMigrationStage.Preparing) ||
+                decision.Accepted && migration.Stage != HostMigrationStage.Offered)
+                throw new InvalidOperationException("Cette proposition de relève n'est plus valide.");
+            if (playerId != migration.SuccessorId)
+                throw new SecurityException("Seul le successeur désigné peut répondre.");
+            _migration = migration with
+            {
+                Stage = decision.Accepted ? HostMigrationStage.Preparing : HostMigrationStage.Declined,
+                // L'ouverture d'un tunnel peut prendre plus longtemps que la réponse à l'offre.
+                // Le successeur dispose donc d'un délai complet pour préparer sa table.
+                ExpiresAtUtc = decision.Accepted ? _clock.GetUtcNow().AddMinutes(2) : migration.ExpiresAtUtc
+            };
+            return _migration;
+        }
+    }
+
+    /// <summary>Diffuse une invitation réelle uniquement après démarrage du tunnel du successeur.</summary>
+    public HostMigrationSnapshot PublishHostMigration(string code, string sessionToken,
+        HostMigrationDestination destination)
+    {
+        lock (_sync)
+        {
+            var playerId = EnsureMember(code, sessionToken);
+            var migration = RequireMigration(destination.Id, HostMigrationStage.Preparing);
+            if (playerId != migration.SuccessorId)
+                throw new SecurityException("Seul le successeur désigné peut publier sa table.");
+            InviteCode.Parse(destination.Invitation);
+            _migration = migration with
+            {
+                Stage = HostMigrationStage.Redirecting, Invitation = destination.Invitation.Trim()
+            };
+            return _migration;
+        }
+    }
+
+    /// <summary>Un joueur confirme avoir rejoint le nouveau serveur avant l'arrêt de l'ancien.</summary>
+    public HostMigrationSnapshot AcknowledgeHostMigration(string code, string sessionToken, Guid migrationId)
+    {
+        lock (_sync)
+        {
+            var playerId = EnsureMember(code, sessionToken);
+            var migration = RequireMigration(migrationId, HostMigrationStage.Redirecting);
+            _migrationAcknowledgements.Add(playerId);
+            return migration with { AcknowledgedPlayers = _migrationAcknowledgements.Count };
+        }
+    }
+
+    /// <summary>Annule une proposition tant que personne n'a reçu l'adresse de relève.</summary>
+    public bool CancelHostMigration(string code, string sessionToken, Guid migrationId)
+    {
+        lock (_sync)
+        {
+            EnsureHost(EnsureMember(code, sessionToken));
+            var migration = _migration ?? throw new InvalidOperationException("Aucune relève en cours.");
+            if (migration.Id != migrationId || migration.Stage == HostMigrationStage.Redirecting)
+                throw new InvalidOperationException("La redirection a déjà commencé.");
+            _migration = migration with { Stage = HostMigrationStage.Expired };
+            return true;
+        }
+    }
+
+    /// <summary>Installe sur le nouvel hôte une liste fermée et la progression déjà gagnée.</summary>
+    public bool ConfigureHostMigration(string code, string sessionToken, HostMigrationSetup setup)
+    {
+        lock (_sync)
+        {
+            EnsureHost(EnsureMember(code, sessionToken));
+            if (_lobby.Status != LobbyStatus.Open || _lobby.Players.Count != 1 || _migrationSetup is not null)
+                throw new InvalidOperationException("Cette table ne peut plus être préparée pour la relève.");
+            if (setup.ExpectedPlayers is null || setup.ExpectedPlayers.Count is < 1 or > 6 ||
+                setup.ExpectedPlayers.Count > _lobby.MaxPlayers ||
+                !string.Equals(setup.ExpectedPlayers[0], _lobby.Players[0].Name,
+                    StringComparison.OrdinalIgnoreCase) ||
+                setup.ExpectedPlayers.Any(string.IsNullOrWhiteSpace) ||
+                setup.ExpectedPlayers.Distinct(StringComparer.OrdinalIgnoreCase).Count() != setup.ExpectedPlayers.Count ||
+                setup.WasStarted && (setup.ExpectedPlayers.Count < 2 ||
+                    setup.HeistNumber != setup.SuccessfulHeists + setup.FailedHeists + 1 ||
+                    setup.SuccessfulHeists is < 0 or > 2 || setup.FailedHeists is < 0 or > 2) ||
+                !setup.WasStarted && (setup.HeistNumber != 0 || setup.SuccessfulHeists != 0 ||
+                    setup.FailedHeists != 0) ||
+                setup.ReturningHostName is not null && !setup.ExpectedPlayers.Contains(
+                    setup.ReturningHostName, StringComparer.OrdinalIgnoreCase))
+                throw new ArgumentException("Données de relève invalides.", nameof(setup));
+            _migrationSetup = setup with { ExpectedPlayers = setup.ExpectedPlayers.ToArray() };
+            return true;
+        }
+    }
+
+    /// <summary>Redistribue le braquage une fois toute la nouvelle équipe arrivée.</summary>
+    private void StartTransferredGameWhenReady()
+    {
+        if (_migrationSetup is not { WasStarted: true } setup ||
+            _lobby.Players.Count != setup.ExpectedPlayers.Count) return;
+        _game = _manager.ContinueAfterHostMigration(Code, _lobby.HostId, setup.HeistNumber,
+            setup.SuccessfulHeists, setup.FailedHeists);
+        _events.Clear();
+        _nextEventSequence = 0;
+        RecordEvent(GameEventKind.HeistStarted, _lobby.HostId, _game);
+    }
+
+    /// <summary>Vérifie qu'une ancienne offre est toujours valide et à l'étape indiquée.</summary>
+    private HostMigrationSnapshot RequireMigration(Guid id, HostMigrationStage stage)
+    {
+        var migration = _migration ?? throw new InvalidOperationException("Aucune relève en cours.");
+        if (migration.Id != id || migration.Stage != stage)
+            throw new InvalidOperationException("Cette proposition de relève n'est plus valide.");
+        return migration;
     }
 
     /// <summary>Retourne la liste publique aux seuls membres identifiés.</summary>
@@ -72,6 +234,24 @@ public sealed class HostedLobby
         lock (_sync)
         {
             EnsureMember(code, sessionToken);
+            return Snapshot();
+        }
+    }
+
+    /// <summary>Réserve davantage de places, ou réduit la table sans retirer de joueur attendu.</summary>
+    public LobbySnapshot ChangeCapacity(string code, string sessionToken, int maxPlayers)
+    {
+        lock (_sync)
+        {
+            var playerId = EnsureMember(code, sessionToken);
+            EnsureHost(playerId);
+            if (_migration is { Stage: HostMigrationStage.Offered or HostMigrationStage.Preparing or
+                HostMigrationStage.Redirecting })
+                throw new InvalidOperationException("La capacité est figée pendant la relève de l'hôte.");
+            if (maxPlayers >= 3 && _migrationSetup is { } setup &&
+                maxPlayers < setup.ExpectedPlayers.Count)
+                throw new InvalidOperationException("La capacité doit garder une place pour chaque joueur transféré.");
+            _manager.ChangeLobbyCapacity(Code, playerId, maxPlayers);
             return Snapshot();
         }
     }
@@ -87,13 +267,15 @@ public sealed class HostedLobby
                 _manager.CloseLobby(Code, _lobby.HostId);
                 _sessions.Clear();
             }
-            else if (_lobby.Status == LobbyStatus.Started)
+            else if (_lobby.Status == LobbyStatus.Started || playerId == _returningHostId)
             {
                 // Le moteur conserve la main et les jetons du joueur pendant sa courte absence.
                 MarkAbsent(playerId, _clock.GetUtcNow());
             }
             else
             {
+                if (_migration is { Stage: HostMigrationStage.Offered or HostMigrationStage.Preparing } migration)
+                    _migration = migration with { Stage = HostMigrationStage.Expired };
                 _manager.LeaveLobby(Code, playerId);
                 _sessions.Remove(sessionToken);
                 _lastSeenGuests.Remove(playerId);
@@ -108,6 +290,9 @@ public sealed class HostedLobby
         {
             var playerId = EnsureMember(code, sessionToken);
             EnsureHost(playerId);
+            EnsureAllPlayersPresent();
+            if (_migrationSetup is { } setup && _lobby.Players.Count < setup.ExpectedPlayers.Count)
+                throw new InvalidOperationException("Tous les joueurs transférés ne sont pas encore arrivés.");
             _game = _manager.StartGame(Code, playerId);
             _events.Clear();
             _nextEventSequence = 0;
@@ -307,10 +492,27 @@ public sealed class HostedLobby
     /// <summary>Détecte les invités silencieux et ferme la partie à la fin de leur délai.</summary>
     private void RefreshPresence(DateTimeOffset now)
     {
-        if (_lobby.Status != LobbyStatus.Started) return;
-        foreach (var (playerId, lastSeen) in _lastSeenGuests)
-            if (!_absentUntil.ContainsKey(playerId) && now - lastSeen >= HeartbeatTimeout)
-                MarkAbsent(playerId, lastSeen + HeartbeatTimeout);
+        if (_migration is { Stage: HostMigrationStage.Offered or HostMigrationStage.Preparing } migration)
+        {
+            if (now >= migration.ExpiresAtUtc)
+                _migration = migration with { Stage = HostMigrationStage.Expired };
+        }
+        // Après publication, les clients cessent de sonder l'ancien serveur en rejoignant
+        // le nouveau. Leur départ ne doit pas fermer l'ancienne table avant les accusés.
+        if (_migration is { Stage: HostMigrationStage.Redirecting }) return;
+        // Le successeur ne sonde plus l'ancien serveur lorsqu'il crée son tunnel.
+        // Les autres invités doivent continuer de répondre : leur départ annule la relève.
+        Guid? preparingSuccessor = _migration is { Stage: HostMigrationStage.Preparing } preparing
+            ? preparing.SuccessorId : null;
+        if (_lobby.Status == LobbyStatus.Started)
+            foreach (var (playerId, lastSeen) in _lastSeenGuests)
+                if (playerId != preparingSuccessor && !_absentUntil.ContainsKey(playerId) &&
+                    now - lastSeen >= HeartbeatTimeout)
+                    MarkAbsent(playerId, lastSeen + HeartbeatTimeout);
+        else if (_returningHostId is { } returningHost &&
+                 _lastSeenGuests.TryGetValue(returningHost, out var returneeLastSeen) &&
+                 !_absentUntil.ContainsKey(returningHost) && now - returneeLastSeen >= HeartbeatTimeout)
+            MarkAbsent(returningHost, returneeLastSeen + HeartbeatTimeout);
         if (_absentUntil.Values.Any(until => now >= until))
         {
             _manager.CloseLobby(Code, _lobby.HostId);
@@ -324,6 +526,10 @@ public sealed class HostedLobby
     {
         _absentUntil.TryAdd(playerId, since + ReconnectGrace);
         CompletePlayerGesture(playerId);
+        // Une équipe incomplète ne doit pas être copiée vers le nouveau serveur.
+        // Une fois l'adresse publiée, l'ancien serveur attend plutôt les accusés de réception.
+        if (_migration is { Stage: HostMigrationStage.Offered or HostMigrationStage.Preparing } migration)
+            _migration = migration with { Stage = HostMigrationStage.Expired };
     }
 
     /// <summary>Empêche toute modification du moteur tant qu'une place est inoccupée.</summary>
@@ -331,6 +537,9 @@ public sealed class HostedLobby
     {
         if (_absentUntil.Count != 0)
             throw new InvalidOperationException("La partie est en pause : un joueur est absent.");
+        if (_migration is { Stage: HostMigrationStage.Offered or HostMigrationStage.Preparing or
+            HostMigrationStage.Redirecting })
+            throw new InvalidOperationException("La table est en pause pendant la relève de l'hôte.");
     }
 
     /// <summary>Compare les codes sans distinction de casse.</summary>
@@ -353,7 +562,16 @@ public sealed class HostedLobby
         new(Code, _lobby.HostId, _lobby.MaxPlayers, _lobby.Status, _lobby.Players)
         {
             AbsentPlayers = _absentUntil.Select(entry => new AbsentPlayerSnapshot(entry.Key,
-                _lobby.Players.First(player => player.Id == entry.Key).Name, entry.Value)).ToArray()
+                _lobby.Players.First(player => player.Id == entry.Key).Name, entry.Value)).ToArray(),
+            HostMigration = _migration is null ? null : _migration with
+            {
+                AcknowledgedPlayers = _migrationAcknowledgements.Count
+            },
+            ExpectedTransferredPlayers = _lobby.Status == LobbyStatus.Open &&
+                _migrationSetup is { } setup && _lobby.Players.Count < setup.ExpectedPlayers.Count
+                ? setup.ExpectedPlayers.Count : null,
+            AutoResumeTransferredGame = _lobby.Status == LobbyStatus.Open &&
+                _migrationSetup?.WasStarted == true
         };
 
     /// <summary>Fait avancer d'une étape seulement après les confirmations du moteur.</summary>

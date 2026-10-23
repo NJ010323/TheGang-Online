@@ -12,6 +12,8 @@ public sealed class Lobby
     private readonly Model.Game.Game _game = new();
     // Le statut empêche les inscriptions après le départ ou la fermeture.
     private LobbyStatus _status = LobbyStatus.Open;
+    // La capacité peut changer avant la partie, sans expulser les joueurs inscrits.
+    private int _maxPlayers;
 
     /// <summary>Crée un lobby et inscrit l'hôte comme premier joueur.</summary>
     internal Lobby(string code, string hostName, int maxPlayers)
@@ -20,7 +22,7 @@ public sealed class Lobby
             throw new ArgumentOutOfRangeException(nameof(maxPlayers), "Un lobby accepte entre trois et six joueurs.");
 
         Code = code;
-        MaxPlayers = maxPlayers;
+        _maxPlayers = maxPlayers;
         _game.AddPlayer(hostName);
         HostId = _game.Players[0].Id;
     }
@@ -32,7 +34,10 @@ public sealed class Lobby
     public Guid HostId { get; }
 
     /// <summary>Nombre maximal de joueurs, hôte compris.</summary>
-    public int MaxPlayers { get; }
+    public int MaxPlayers
+    {
+        get { lock (_sync) return _maxPlayers; }
+    }
 
     /// <summary>État actuel du lobby.</summary>
     public LobbyStatus Status
@@ -58,7 +63,7 @@ public sealed class Lobby
         lock (_sync)
         {
             EnsureOpen();
-            if (_game.Players.Count >= MaxPlayers)
+            if (_game.Players.Count >= _maxPlayers)
                 throw new InvalidOperationException("Le lobby est complet.");
 
             _game.AddPlayer(name);
@@ -88,6 +93,36 @@ public sealed class Lobby
             EnsureOpen();
             EnsureHost(requesterId);
             _game.StartGame();
+            _status = LobbyStatus.Started;
+            return _game;
+        }
+    }
+
+    /// <summary>Change le nombre de places avant le départ, sans exclure un joueur présent.</summary>
+    internal void ChangeCapacity(Guid requesterId, int maxPlayers)
+    {
+        lock (_sync)
+        {
+            EnsureOpen();
+            EnsureHost(requesterId);
+            if (maxPlayers is < 3 or > 6)
+                throw new ArgumentOutOfRangeException(nameof(maxPlayers),
+                    "Un lobby accepte entre trois et six joueurs.");
+            if (maxPlayers < _game.Players.Count)
+                throw new InvalidOperationException("La capacité ne peut pas être inférieure au nombre de joueurs présents.");
+            _maxPlayers = maxPlayers;
+        }
+    }
+
+    /// <summary>Relance le braquage interrompu après inscription du nouvel effectif.</summary>
+    internal Model.Game.Game ContinueAfterHostMigration(Guid requesterId, int heistNumber,
+        int successfulHeists, int failedHeists)
+    {
+        lock (_sync)
+        {
+            EnsureOpen();
+            EnsureHost(requesterId);
+            _game.ContinueAfterHostMigration(heistNumber, successfulHeists, failedHeists);
             _status = LobbyStatus.Started;
             return _game;
         }

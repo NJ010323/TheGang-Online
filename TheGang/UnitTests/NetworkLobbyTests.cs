@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Model.Game;
+using Model.Lobby;
 using Network;
 
 namespace UnitTests;
@@ -101,6 +102,325 @@ public class NetworkLobbyTests
         using var wrongIdentity = new LobbyHttpClient(server.LocalAddress);
         await Assert.ThrowsAsync<LobbySessionClosedException>(() => wrongIdentity.ResumeAsync(
             identity.Code, chloe.Identity!.PlayerId, identity.SessionToken));
+    }
+
+    [Fact]
+    public async Task HostCanIncreaseCapacityAndGuestsSeeTheNewPlace()
+    {
+        await using var server = await LobbyHttpServer.StartAsync("Alice", 3);
+        using var host = new LobbyHttpClient(server.LocalAddress);
+        using var bob = new LobbyHttpClient(server.LocalAddress);
+        using var chloe = new LobbyHttpClient(server.LocalAddress);
+        using var dora = new LobbyHttpClient(server.LocalAddress);
+        host.SetHostIdentity(server.Lobby.HostIdentity);
+        await bob.JoinAsync("Bob", server.Lobby.InvitationSecret);
+        await chloe.JoinAsync("Chloe", server.Lobby.InvitationSecret);
+        var full = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            dora.JoinAsync("Dora", server.Lobby.InvitationSecret));
+        Assert.Equal(HttpStatusCode.Conflict, full.StatusCode);
+
+        var forbidden = await Assert.ThrowsAsync<HttpRequestException>(() => bob.ChangeCapacityAsync(4));
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+        var invalid = await Assert.ThrowsAsync<HttpRequestException>(() => host.ChangeCapacityAsync(7));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal(4, (await host.ChangeCapacityAsync(4)).MaxPlayers);
+        Assert.Equal(4, (await bob.GetLobbyAsync()).MaxPlayers);
+        await dora.JoinAsync("Dora", server.Lobby.InvitationSecret);
+        var tooSmall = await Assert.ThrowsAsync<HttpRequestException>(() => host.ChangeCapacityAsync(3));
+        Assert.Equal(HttpStatusCode.Conflict, tooSmall.StatusCode);
+        Assert.Equal(4, (await host.GetLobbyAsync()).MaxPlayers);
+
+        await host.StartAsync();
+        var started = await Assert.ThrowsAsync<HttpRequestException>(() => host.ChangeCapacityAsync(5));
+        Assert.Equal(HttpStatusCode.Conflict, started.StatusCode);
+        Assert.Equal(4, (await host.BeginHostMigrationAsync()).MaxPlayers);
+    }
+
+    [Fact]
+    public void CapacityCannotDropBelowPlayersExpectedDuringHostMigration()
+    {
+        var next = new HostedLobby("Bob", 4);
+        next.ConfigureHostMigration(next.Code, next.HostIdentity.SessionToken,
+            new HostMigrationSetup(["Bob", "Chloe", "Dora", "Emma"], false, 0, 0, 0, null));
+        Assert.Throws<InvalidOperationException>(() =>
+            next.ChangeCapacity(next.Code, next.HostIdentity.SessionToken, 3));
+        Assert.Equal(4, next.GetLobby(next.Code, next.HostIdentity.SessionToken).MaxPlayers);
+    }
+
+    [Fact]
+    public async Task ServerConflictDisplaysItsMessageWithoutRawJson()
+    {
+        using var client = new LobbyHttpClient(new Uri("https://example.trycloudflare.com"),
+            new JsonConflictHandler());
+
+        var error = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.JoinAsync("Guest", "0123456789ABCDEF0123456789ABCDEF"));
+
+        Assert.Equal(HttpStatusCode.Conflict, error.StatusCode);
+        Assert.Contains("Cette proposition de relève n'est plus valide.", error.Message);
+        Assert.DoesNotContain("{\"error\"", error.Message);
+    }
+
+    [Fact]
+    public async Task FirstGuestCanAcceptHostMigrationAndThreeRemainingPlayersRestartTheHeist()
+    {
+        await using var oldServer = await LobbyHttpServer.StartAsync("Alice", 4);
+        using var oldHost = new LobbyHttpClient(oldServer.LocalAddress);
+        using var successor = new LobbyHttpClient(oldServer.LocalAddress);
+        using var third = new LobbyHttpClient(oldServer.LocalAddress);
+        using var fourth = new LobbyHttpClient(oldServer.LocalAddress);
+        oldHost.SetHostIdentity(oldServer.Lobby.HostIdentity);
+        await successor.JoinAsync("Bob", oldServer.Lobby.InvitationSecret);
+        await third.JoinAsync("Chloe", oldServer.Lobby.InvitationSecret);
+        await fourth.JoinAsync("Dora", oldServer.Lobby.InvitationSecret);
+        await oldHost.StartAsync();
+
+        var migration = await oldHost.BeginHostMigrationAsync();
+        Assert.Equal(successor.Identity!.PlayerId, migration.SuccessorId);
+        Assert.Equal(new[] { "Bob", "Chloe", "Dora" }, migration.ExpectedPlayers);
+        Assert.Equal(1, migration.HeistNumber);
+        Assert.Equal(HostMigrationStage.Offered, migration.Stage);
+        var frozen = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            third.ApplyAsync(new GameActionRequest(GameAction.TakeToken, 1)));
+        Assert.Equal(HttpStatusCode.Conflict, frozen.StatusCode);
+        var forbidden = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            third.DecideHostMigrationAsync(new HostMigrationDecision(migration.Id, true)));
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        await successor.DecideHostMigrationAsync(new HostMigrationDecision(migration.Id, true));
+        await using var newServer = await LobbyHttpServer.StartAsync("Bob", 4);
+        using var newHost = new LobbyHttpClient(newServer.LocalAddress);
+        using var migratedThird = new LobbyHttpClient(newServer.LocalAddress);
+        using var migratedFourth = new LobbyHttpClient(newServer.LocalAddress);
+        newHost.SetHostIdentity(newServer.Lobby.HostIdentity);
+        await newHost.ConfigureHostMigrationAsync(new HostMigrationSetup(migration.ExpectedPlayers,
+            true, migration.HeistNumber, migration.SuccessfulHeists, migration.FailedHeists, null));
+        var fakeInvitation = InviteCode.Create(newServer.Lobby.Code,
+            new Uri("https://fresh-table.trycloudflare.com"), newServer.Lobby.InvitationSecret);
+        await successor.PublishHostMigrationAsync(new HostMigrationDestination(migration.Id, fakeInvitation));
+        Assert.Equal(fakeInvitation, (await third.GetLobbyAsync()).HostMigration!.Invitation);
+        await migratedThird.JoinAsync("Chloe", newServer.Lobby.InvitationSecret);
+        await migratedFourth.JoinAsync("Dora", newServer.Lobby.InvitationSecret);
+        var continued = await newHost.GetGameAsync();
+        Assert.Equal(GamePhase.PreFlop, continued.Phase);
+        Assert.Equal(3, continued.Players.Count);
+        Assert.Equal(3, continued.AvailableTokens.Count);
+        Assert.Equal(1, continued.HeistNumber);
+        Assert.DoesNotContain(continued.Players, player => player.Name == "Alice");
+        Assert.Equal(2, continued.Players.Single(player => player.Id == newHost.Identity!.PlayerId).Hand.Count);
+        await PlayRoundAsync(newHost, migratedThird, migratedFourth);
+
+        await successor.AcknowledgeHostMigrationAsync(migration.Id);
+        await third.AcknowledgeHostMigrationAsync(migration.Id);
+        await fourth.AcknowledgeHostMigrationAsync(migration.Id);
+        var acknowledged = await oldHost.AcknowledgeHostMigrationAsync(migration.Id);
+        Assert.Equal(4, acknowledged.AcknowledgedPlayers);
+        await oldHost.LeaveAsync();
+        Assert.Equal(GamePhase.PreFlop, (await newHost.GetGameAsync()).Phase);
+    }
+
+    [Fact]
+    public void MigrationCanReserveDepartingHostWhenOnlyOneGuestRemains()
+    {
+        var clock = new AdjustableClock(new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero));
+        var old = new HostedLobby("Alice", 3, clock);
+        var bob = old.Join("Bob", old.InvitationSecret);
+        var offer = old.BeginHostMigration(old.Code, old.HostIdentity.SessionToken);
+        Assert.Equal(bob.PlayerId, offer.SuccessorId);
+        old.DecideHostMigration(old.Code, bob.SessionToken, new HostMigrationDecision(offer.Id, true));
+
+        var next = new HostedLobby("Bob", 3, clock);
+        next.ConfigureHostMigration(next.Code, next.HostIdentity.SessionToken,
+            new HostMigrationSetup(["Bob", "Alice"], false, 0, 0, 0, "Alice"));
+        var returningHost = next.Join("Alice", next.InvitationSecret);
+        next.Leave(next.Code, returningHost.SessionToken);
+        var paused = next.GetLobby(next.Code, next.HostIdentity.SessionToken);
+        Assert.Equal(LobbyStatus.Open, paused.Status);
+        Assert.Equal("Alice", Assert.Single(paused.AbsentPlayers).Name);
+
+        next.Resume(next.Code, returningHost.SessionToken);
+        Assert.Empty(next.GetLobby(next.Code, next.HostIdentity.SessionToken).AbsentPlayers);
+        next.Leave(next.Code, returningHost.SessionToken);
+        clock.Advance(TimeSpan.FromMinutes(2));
+        Assert.Throws<KeyNotFoundException>(() => next.GetLobby(next.Code, next.HostIdentity.SessionToken));
+    }
+
+    [Fact]
+    public void TransferredGameKeepsCompletedResultsAndAllowsTwoPlayers()
+    {
+        var next = new HostedLobby("Bob", 3);
+        next.ConfigureHostMigration(next.Code, next.HostIdentity.SessionToken,
+            new HostMigrationSetup(["Bob", "Chloe"], true, 2, 1, 0, null));
+        var chloe = next.Join("Chloe", next.InvitationSecret);
+        var game = next.GetGame(next.Code, chloe.SessionToken);
+        Assert.Equal(2, game.HeistNumber);
+        Assert.Equal(1, game.SuccessfulHeists);
+        Assert.Equal(0, game.FailedHeists);
+        Assert.Equal(2, game.AvailableTokens.Count);
+        Assert.Equal(GamePhase.PreFlop, game.Phase);
+    }
+
+    [Fact]
+    public async Task CompletedHeistScoreSurvivesMigrationWhileCurrentHeistIsRedealt()
+    {
+        await using var oldServer = await LobbyHttpServer.StartAsync("Alice", 4);
+        using var alice = new LobbyHttpClient(oldServer.LocalAddress);
+        using var bob = new LobbyHttpClient(oldServer.LocalAddress);
+        using var chloe = new LobbyHttpClient(oldServer.LocalAddress);
+        using var dora = new LobbyHttpClient(oldServer.LocalAddress);
+        alice.SetHostIdentity(oldServer.Lobby.HostIdentity);
+        await bob.JoinAsync("Bob", oldServer.Lobby.InvitationSecret);
+        await chloe.JoinAsync("Chloe", oldServer.Lobby.InvitationSecret);
+        await dora.JoinAsync("Dora", oldServer.Lobby.InvitationSecret);
+        await alice.StartAsync();
+        for (var round = 0; round < 4; round++)
+        {
+            await PlayRoundAsync(alice, bob, chloe, dora);
+            await alice.ApplyAsync(new GameActionRequest(GameAction.AdvanceRound));
+        }
+        for (var player = 0; player < 4; player++)
+            await alice.ApplyAsync(new GameActionRequest(GameAction.RevealNextHand));
+        var resolved = await alice.ApplyAsync(new GameActionRequest(GameAction.ResolveHeist));
+        Assert.Equal(GamePhase.HeistComplete, resolved.Phase);
+
+        var offer = await alice.BeginHostMigrationAsync();
+        Assert.Equal(2, offer.HeistNumber);
+        Assert.Equal(1, offer.SuccessfulHeists + offer.FailedHeists);
+        var next = new HostedLobby("Bob", 4);
+        next.ConfigureHostMigration(next.Code, next.HostIdentity.SessionToken,
+            new HostMigrationSetup(offer.ExpectedPlayers, offer.WasStarted, offer.HeistNumber,
+                offer.SuccessfulHeists, offer.FailedHeists, null));
+        next.Join("Chloe", next.InvitationSecret);
+        next.Join("Dora", next.InvitationSecret);
+        var continued = next.GetGame(next.Code, next.HostIdentity.SessionToken);
+        Assert.Equal(offer.HeistNumber, continued.HeistNumber);
+        Assert.Equal(offer.SuccessfulHeists, continued.SuccessfulHeists);
+        Assert.Equal(offer.FailedHeists, continued.FailedHeists);
+        Assert.Equal(3, continued.Players.Count);
+        Assert.Empty(continued.CommunityCards);
+        Assert.All(continued.Players, player => Assert.Empty(player.Signals));
+    }
+
+    [Fact]
+    public void MigrationRefusalAndExpiryRestoreTheOriginalTable()
+    {
+        var clock = new AdjustableClock(new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero));
+        var lobby = new HostedLobby("Alice", 3, clock);
+        var bob = lobby.Join("Bob", lobby.InvitationSecret);
+        lobby.Join("Chloe", lobby.InvitationSecret);
+        var offer = lobby.BeginHostMigration(lobby.Code, lobby.HostIdentity.SessionToken);
+        Assert.Throws<InvalidOperationException>(() =>
+            lobby.Start(lobby.Code, lobby.HostIdentity.SessionToken));
+        lobby.DecideHostMigration(lobby.Code, bob.SessionToken,
+            new HostMigrationDecision(offer.Id, false));
+        var second = lobby.BeginHostMigration(lobby.Code, lobby.HostIdentity.SessionToken);
+        clock.Advance(TimeSpan.FromMinutes(2));
+        Assert.Equal(HostMigrationStage.Expired,
+            lobby.GetLobby(lobby.Code, lobby.HostIdentity.SessionToken).HostMigration!.Stage);
+        Assert.Throws<InvalidOperationException>(() => lobby.DecideHostMigration(lobby.Code,
+            bob.SessionToken, new HostMigrationDecision(second.Id, true)));
+        Assert.Equal(GamePhase.PreFlop,
+            lobby.Start(lobby.Code, lobby.HostIdentity.SessionToken).Phase);
+    }
+
+    [Fact]
+    public void PreparingMigrationSurvivesMissedHeartbeatsAndGetsItsOwnDeadline()
+    {
+        var clock = new AdjustableClock(new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero));
+        var lobby = new HostedLobby("Alice", 4, clock);
+        var bob = lobby.Join("Bob", lobby.InvitationSecret);
+        var chloe = lobby.Join("Chloe", lobby.InvitationSecret);
+        var dora = lobby.Join("Dora", lobby.InvitationSecret);
+        lobby.Start(lobby.Code, lobby.HostIdentity.SessionToken);
+
+        var offer = lobby.BeginHostMigration(lobby.Code, lobby.HostIdentity.SessionToken);
+        for (var index = 0; index < 18; index++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(5));
+            lobby.GetLobby(lobby.Code, bob.SessionToken);
+            lobby.GetLobby(lobby.Code, chloe.SessionToken);
+            lobby.GetLobby(lobby.Code, dora.SessionToken);
+        }
+        var pending = lobby.GetLobby(lobby.Code, lobby.HostIdentity.SessionToken);
+        Assert.Equal(HostMigrationStage.Offered, pending.HostMigration!.Stage);
+        Assert.Empty(pending.AbsentPlayers);
+
+        var preparing = lobby.DecideHostMigration(lobby.Code, bob.SessionToken,
+            new HostMigrationDecision(offer.Id, true));
+        Assert.Equal(clock.GetUtcNow().AddMinutes(2), preparing.ExpiresAtUtc);
+        for (var index = 0; index < 7; index++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(5));
+            lobby.GetLobby(lobby.Code, lobby.HostIdentity.SessionToken);
+            lobby.GetLobby(lobby.Code, chloe.SessionToken);
+            lobby.GetLobby(lobby.Code, dora.SessionToken);
+        }
+        pending = lobby.GetLobby(lobby.Code, lobby.HostIdentity.SessionToken);
+        Assert.Equal(HostMigrationStage.Preparing, pending.HostMigration!.Stage);
+        Assert.Empty(pending.AbsentPlayers);
+
+        var invitation = InviteCode.Create("ABC234",
+            new Uri("https://fresh-table.trycloudflare.com"), lobby.InvitationSecret);
+        var published = lobby.PublishHostMigration(lobby.Code, bob.SessionToken,
+            new HostMigrationDestination(offer.Id, invitation));
+        Assert.Equal(HostMigrationStage.Redirecting, published.Stage);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GuestDisconnectBeforePublicationCancelsMigrationWithoutLosingTheirResumePlace(
+        bool accepted)
+    {
+        var old = new HostedLobby("Alice", 3);
+        var bob = old.Join("Bob", old.InvitationSecret);
+        old.Join("Chloe", old.InvitationSecret);
+        old.Start(old.Code, old.HostIdentity.SessionToken);
+        var offer = old.BeginHostMigration(old.Code, old.HostIdentity.SessionToken);
+        if (accepted)
+            old.DecideHostMigration(old.Code, bob.SessionToken,
+                new HostMigrationDecision(offer.Id, true));
+        old.Leave(old.Code, bob.SessionToken);
+        Assert.Equal(HostMigrationStage.Expired,
+            old.GetLobby(old.Code, old.HostIdentity.SessionToken).HostMigration!.Stage);
+        Assert.Single(old.GetLobby(old.Code, old.HostIdentity.SessionToken).AbsentPlayers);
+        old.Resume(old.Code, bob.SessionToken);
+        var retry = old.BeginHostMigration(old.Code, old.HostIdentity.SessionToken);
+        Assert.NotEqual(offer.Id, retry.Id);
+    }
+
+    [Fact]
+    public void TransferredLobbyRejectsUnknownPlayersAndPausesForReturningFormerHost()
+    {
+        var clock = new AdjustableClock(new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero));
+        var next = new HostedLobby("Bob", 3, clock);
+        next.ConfigureHostMigration(next.Code, next.HostIdentity.SessionToken,
+            new HostMigrationSetup(["Bob", "Alice"], true, 1, 0, 0, "Alice"));
+        Assert.Throws<UnauthorizedAccessException>(() => next.Join("Mallory", next.InvitationSecret));
+        var alice = next.Join("Alice", next.InvitationSecret);
+        var oldHand = next.GetGame(next.Code, alice.SessionToken).Players
+            .Single(player => player.Id == alice.PlayerId).Hand;
+        next.Leave(next.Code, alice.SessionToken);
+        Assert.Single(next.GetLobby(next.Code, next.HostIdentity.SessionToken).AbsentPlayers);
+        Assert.Throws<InvalidOperationException>(() => next.Apply(next.Code,
+            next.HostIdentity.SessionToken, new GameActionRequest(GameAction.TakeToken, 1)));
+        next.Resume(next.Code, alice.SessionToken);
+        var resumedHand = next.GetGame(next.Code, alice.SessionToken).Players
+            .Single(player => player.Id == alice.PlayerId).Hand;
+        Assert.Equal(oldHand, resumedHand);
+    }
+
+    [Fact]
+    public void PregameTransferredLobbyCanInviteNewPlayersAfterOriginalGuestsArrive()
+    {
+        var next = new HostedLobby("Bob", 4);
+        next.ConfigureHostMigration(next.Code, next.HostIdentity.SessionToken,
+            new HostMigrationSetup(["Bob", "Chloe"], false, 0, 0, 0, null));
+        Assert.Throws<UnauthorizedAccessException>(() => next.Join("Dora", next.InvitationSecret));
+        next.Join("Chloe", next.InvitationSecret);
+        next.Join("Dora", next.InvitationSecret);
+        Assert.Equal(GamePhase.PreFlop,
+            next.Start(next.Code, next.HostIdentity.SessionToken).Phase);
     }
 
     [Fact]
@@ -461,6 +781,17 @@ public class NetworkLobbyTests
             CancellationToken cancellationToken) => Task.FromResult(new HttpResponseMessage((HttpStatusCode)530)
         {
             Content = new StringContent("<html>Une très longue page d'erreur du tunnel</html>")
+        });
+    }
+
+    /// <summary>Reproduit une erreur métier JSON pour vérifier le texte montré aux joueurs.</summary>
+    private sealed class JsonConflictHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict)
+        {
+            Content = new StringContent("{\"error\":\"Cette proposition de relève n'est plus valide.\"}",
+                System.Text.Encoding.UTF8, "application/json")
         });
     }
 

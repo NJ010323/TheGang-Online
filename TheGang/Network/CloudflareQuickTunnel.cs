@@ -84,7 +84,7 @@ public sealed partial class CloudflareQuickTunnel : IAsyncDisposable
             process.Dispose();
             if (error is Win32Exception startError && startError.NativeErrorCode is 2 or 3)
                 throw new FileNotFoundException(
-                    "cloudflared.exe est introuvable. Lancez View.exe depuis le dossier publié complet.",
+                    "cloudflared.exe est introuvable. Lancez TheGang.exe depuis le dossier publié complet.",
                     binary, startError);
             if (error is OperationCanceledException && !cancellationToken.IsCancellationRequested)
                 throw new TimeoutException("Le tunnel Cloudflare n'a pas pu démarrer dans le délai prévu.", error);

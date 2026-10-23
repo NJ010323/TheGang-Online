@@ -1,4 +1,4 @@
-# Prépare un dossier autonome : les joueurs lancent View.exe sans installer cloudflared.
+# Prépare un dossier autonome : les joueurs lancent TheGang.exe sans installer cloudflared.
 param([string]$OutputDirectory = (Join-Path $PSScriptRoot 'artifacts/win-x64'))
 
 Set-StrictMode -Version Latest
@@ -12,6 +12,10 @@ $licenseUrl = "https://raw.githubusercontent.com/cloudflare/cloudflared/$cloudfl
 dotnet publish (Join-Path $PSScriptRoot 'View/View.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $OutputDirectory
 if ($LASTEXITCODE -ne 0) { throw 'La publication du jeu a échoué.' }
 
+# Écarte l'ancien nom pour ne pas laisser deux versions du jeu dans un dossier republié.
+$legacyExecutable = Join-Path $OutputDirectory 'View.exe'
+if (Test-Path -LiteralPath $legacyExecutable) { Remove-Item -LiteralPath $legacyExecutable }
+
 $binaryPath = Join-Path $OutputDirectory 'cloudflared.exe'
 if (-not (Test-Path -LiteralPath $binaryPath) -or
     (Get-FileHash -LiteralPath $binaryPath -Algorithm SHA256).Hash -ne $expectedSha256) {
@@ -24,4 +28,4 @@ if ($actualSha256 -ne $expectedSha256) {
 }
 Invoke-WebRequest -Uri $licenseUrl -OutFile (Join-Path $OutputDirectory 'cloudflared-LICENSE.txt')
 
-Write-Output "Jeu prêt : $(Join-Path $OutputDirectory 'View.exe')"
+Write-Output "Jeu prêt : $(Join-Path $OutputDirectory 'TheGang.exe')"

@@ -33,6 +33,8 @@ public partial class MainWindow : Window
     private bool _confirmCueActive;
     private bool _confirmCueAnimated;
     private LobbyStatus _lastLobbyStatus = LobbyStatus.Open;
+    // Dernière liste fournie par le serveur, utilisée aussi dans la confirmation de sortie.
+    private LobbySnapshot? _lastLobbySnapshot;
     // L'état précédent sert à animer seulement les nouvelles cartes ou phases.
     private GamePhase? _lastRenderedPhase;
     private int _lastCommunityCount;
@@ -127,7 +129,7 @@ public partial class MainWindow : Window
         GameSettingsSection.Visibility = GamePanel.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;
         ExitGameHint.Text = _session?.IsHost == true
-            ? "Quitter met fin à la partie pour tous les joueurs."
+            ? "En quittant, proposez au premier invité de reprendre la table."
             : "Votre place sera gardée pendant deux minutes. Les autres joueurs attendront votre retour.";
         SettingsOverlay.Visibility = Visibility.Visible;
     }
@@ -258,11 +260,20 @@ public partial class MainWindow : Window
     /// <summary>Affiche le lobby et commence à surveiller les changements de joueurs.</summary>
     private void EnterLobby()
     {
+        // Une relève peut arriver au milieu d'une animation de l'ancienne table.
+        StopCardDeal();
+        HideHeistOutcome();
+        HideRoundTransition();
+        CloseRulesCard();
+        SettingsOverlay.Visibility = Visibility.Collapsed;
+        TokenActionWheel.Visibility = Visibility.Collapsed;
+        UpdateConfirmCue(false);
         MenuPanel.Visibility = Visibility.Collapsed;
         EntryPanel.Visibility = Visibility.Collapsed;
         GamePanel.Visibility = Visibility.Collapsed;
         LobbyPanel.Visibility = Visibility.Visible;
         InvitationOutput.Text = _session!.Invitation;
+        _lastLobbySnapshot = _session.Client.Identity?.Lobby;
         StartButton.Visibility = _session.IsHost ? Visibility.Visible : Visibility.Collapsed;
         _lastLobbyStatus = LobbyStatus.Open;
         _lastRenderedPhase = null;
@@ -291,6 +302,8 @@ public partial class MainWindow : Window
                     NoticeLevel.Error, autoHide: false);
             }
         }
+        if (_lastLobbySnapshot is { } initialLobby)
+            RenderLobbySummary(_session, initialLobby);
         _refreshTimer.Interval = TimeSpan.FromSeconds(2);
         _refreshTimer.Start();
         _ = RefreshAsync();
@@ -301,6 +314,26 @@ public partial class MainWindow : Window
     {
         Clipboard.SetText(InvitationOutput.Text);
         ShowNotice("Invitation copiée. Vous pouvez l'envoyer aux autres joueurs.", NoticeLevel.Success);
+    }
+
+    /// <summary>Change immédiatement les places disponibles sans recréer l'invitation du lobby.</summary>
+    private async void LobbyCapacity_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string value } || !int.TryParse(value, out var maxPlayers) ||
+            _session is not { IsHost: true } session || _lastLobbySnapshot is not { } lobby)
+            return;
+        if (maxPlayers == lobby.MaxPlayers) return;
+        await RunAsync(async () =>
+        {
+            var updated = await session.Client.ChangeCapacityAsync(maxPlayers);
+            if (_session != session) return;
+            _lastLobbySnapshot = updated;
+            RenderLobbySummary(session, updated);
+            ShowNotice($"La table accueille maintenant jusqu'à {maxPlayers} joueurs.", NoticeLevel.Success);
+        }, showProgress: false);
+        // En cas de refus du serveur, la sélection revient à la capacité réelle.
+        if (_session == session && _lastLobbySnapshot is { } current)
+            RenderLobbySummary(session, current);
     }
 
     /// <summary>L'hôte distribue les cartes lorsque trois joueurs ou plus sont présents.</summary>
@@ -333,6 +366,39 @@ public partial class MainWindow : Window
     /// <summary>Interroge périodiquement l'hôte pour mettre à jour lobby et partie.</summary>
     private async void RefreshTimer_Tick(object? sender, EventArgs e) => await RefreshAsync();
 
+    /// <summary>Présente à tous la capacité actuelle ; seul l'hôte peut la modifier avant la partie.</summary>
+    private void RenderLobbySummary(DesktopLobbySession session, LobbySnapshot lobby)
+    {
+        LobbyDetails.Text = lobby.ExpectedTransferredPlayers is { } expected
+            ? $"Relève · {lobby.Players.Count}/{expected} réunis · {lobby.MaxPlayers} places · code {lobby.Code}"
+            : $"Code local : {lobby.Code}   ·   {lobby.Players.Count}/{lobby.MaxPlayers} joueurs";
+        PlayersList.ItemsSource = lobby.Players.Select(player =>
+            player.Id == lobby.HostId ? $"♠  {player.Name}  ·  hôte" : $"♠  {player.Name}").ToArray();
+        var allTransferred = lobby.ExpectedTransferredPlayers is null ||
+            lobby.Players.Count >= lobby.ExpectedTransferredPlayers.Value;
+        StartButton.IsEnabled = session.IsHost && lobby.Players.Count >= 3 &&
+            lobby.AbsentPlayers.Count == 0 && lobby.Status == LobbyStatus.Open &&
+            allTransferred && !lobby.AutoResumeTransferredGame && !_busy;
+        StartButton.Visibility = session.IsHost && !lobby.AutoResumeTransferredGame
+            ? Visibility.Visible : Visibility.Collapsed;
+        LeaveButton.Visibility = lobby.Status == LobbyStatus.Open ? Visibility.Visible : Visibility.Collapsed;
+
+        var canChangeCapacity = session.IsHost && lobby.Status == LobbyStatus.Open &&
+            !lobby.AutoResumeTransferredGame && lobby.HostMigration is not
+                { Stage: HostMigrationStage.Offered or HostMigrationStage.Preparing or HostMigrationStage.Redirecting };
+        LobbyCapacityPanel.Visibility = canChangeCapacity ? Visibility.Visible : Visibility.Collapsed;
+        LobbyCapacityPanel.IsEnabled = canChangeCapacity && !_busy;
+        var minimum = Math.Max(lobby.Players.Count, lobby.ExpectedTransferredPlayers ?? 0);
+        LobbyPlayers3Option.IsEnabled = minimum <= 3;
+        LobbyPlayers4Option.IsEnabled = minimum <= 4;
+        LobbyPlayers5Option.IsEnabled = minimum <= 5;
+        LobbyPlayers6Option.IsEnabled = minimum <= 6;
+        LobbyPlayers3Option.IsChecked = lobby.MaxPlayers == 3;
+        LobbyPlayers4Option.IsChecked = lobby.MaxPlayers == 4;
+        LobbyPlayers5Option.IsChecked = lobby.MaxPlayers == 5;
+        LobbyPlayers6Option.IsChecked = lobby.MaxPlayers == 6;
+    }
+
     /// <summary>Actualise la session et tente sa reprise si le tunnel cesse temporairement de répondre.</summary>
     private async Task RefreshAsync()
     {
@@ -342,13 +408,11 @@ public partial class MainWindow : Window
         try
         {
             var lobby = await session.Client.GetLobbyAsync();
-            if (_session != session) return;
+            if (_session != session || _busy) return;
+            _lastLobbySnapshot = lobby;
+            if (await HandleHostMigrationAsync(session, lobby)) return;
             _lastLobbyStatus = lobby.Status;
-            LobbyDetails.Text = $"Code local : {lobby.Code}   ·   {lobby.Players.Count}/{lobby.MaxPlayers} joueurs";
-            PlayersList.ItemsSource = lobby.Players.Select(player =>
-                player.Id == lobby.HostId ? $"♠  {player.Name}  ·  hôte" : $"♠  {player.Name}").ToArray();
-            StartButton.IsEnabled = session.IsHost && lobby.Players.Count >= 3 && lobby.Status == LobbyStatus.Open;
-            LeaveButton.Visibility = lobby.Status == LobbyStatus.Open ? Visibility.Visible : Visibility.Collapsed;
+            RenderLobbySummary(session, lobby);
             if (lobby.Status == LobbyStatus.Started)
             {
                 var game = await session.Client.GetGameAsync();
@@ -715,6 +779,7 @@ public partial class MainWindow : Window
         _busy = true;
         CreateButton.IsEnabled = JoinButton.IsEnabled = ResumeButton.IsEnabled = StartButton.IsEnabled = false;
         HostActions.IsEnabled = false;
+        LobbyCapacityPanel.IsEnabled = false;
         try
         {
             _connectionWarning = false;
@@ -739,8 +804,9 @@ public partial class MainWindow : Window
             ConfirmExitButton.IsEnabled = true;
             CreateButton.IsEnabled = JoinButton.IsEnabled = ResumeButton.IsEnabled = true;
             HostActions.IsEnabled = true;
-            if (_session is { IsHost: true } && LobbyPanel.Visibility == Visibility.Visible)
-                StartButton.IsEnabled = PlayersList.Items.Count >= 3;
+            if (_session is { } session && _lastLobbySnapshot is { } lobby &&
+                LobbyPanel.Visibility == Visibility.Visible)
+                RenderLobbySummary(session, lobby);
         }
     }
 
@@ -766,6 +832,7 @@ public partial class MainWindow : Window
         CloseRulesCard();
         SettingsOverlay.Visibility = Visibility.Collapsed;
         DismissExitConfirmation();
+        HideMigrationOverlays();
         await CloseSessionAsync();
         MenuPanel.Visibility = Visibility.Visible;
         EntryPanel.Visibility = LobbyPanel.Visibility = GamePanel.Visibility = Visibility.Collapsed;
@@ -781,6 +848,7 @@ public partial class MainWindow : Window
         _bankCenters.Clear();
         _visibleTokenSources.Clear();
         _lastLobbyStatus = LobbyStatus.Open;
+        _lastLobbySnapshot = null;
         _lastRenderedPhase = null;
         _lastHeistNumber = _lastCommunityCount = 0;
         _lastSeenEventSequence = 0;

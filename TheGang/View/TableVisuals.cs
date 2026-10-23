@@ -19,9 +19,9 @@ internal static class TableVisuals
     public static bool AnimationsEnabled { get; set; } = true;
 
     private static readonly ImageSource CardBack = new BitmapImage(
-        new Uri("pack://application:,,,/View;component/Assets/card-back.png", UriKind.Absolute));
+        new Uri("pack://application:,,,/TheGang;component/Assets/card-back.png", UriKind.Absolute));
     private static readonly BitmapSource ChipAtlas = new BitmapImage(
-        new Uri("pack://application:,,,/View;component/Assets/chip-atlas.png", UriKind.Absolute));
+        new Uri("pack://application:,,,/TheGang;component/Assets/chip-atlas.png", UriKind.Absolute));
     private static readonly IReadOnlyDictionary<TokenColors, BitmapSource> ChipSprites = CreateChipSprites();
     private static readonly Dictionary<(int Value, double Size), Geometry> NumberOutlines = new();
 

@@ -45,6 +45,34 @@ public class LobbyTests
     }
 
     [Fact]
+    public void HostCanExpandThenReduceAnOpenLobbyWithoutEvictingPlayers()
+    {
+        var manager = new LobbyManager();
+        var lobby = manager.CreateLobby("Alice", 3);
+        var bob = manager.JoinLobby(lobby.Code, "Bob");
+        manager.JoinLobby(lobby.Code, "Chloe");
+        Assert.Throws<InvalidOperationException>(() => manager.JoinLobby(lobby.Code, "Dana"));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            manager.ChangeLobbyCapacity(lobby.Code, bob.Id, 4));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            manager.ChangeLobbyCapacity(lobby.Code, lobby.HostId, 7));
+        manager.ChangeLobbyCapacity(lobby.Code, lobby.HostId, 4);
+        Assert.Equal(4, lobby.MaxPlayers);
+        var dana = manager.JoinLobby(lobby.Code, "Dana");
+        Assert.Throws<InvalidOperationException>(() =>
+            manager.ChangeLobbyCapacity(lobby.Code, lobby.HostId, 3));
+        Assert.Equal(4, lobby.MaxPlayers);
+
+        manager.LeaveLobby(lobby.Code, dana.Id);
+        manager.ChangeLobbyCapacity(lobby.Code, lobby.HostId, 3);
+        Assert.Equal(3, lobby.MaxPlayers);
+        manager.StartGame(lobby.Code, lobby.HostId);
+        Assert.Throws<InvalidOperationException>(() =>
+            manager.ChangeLobbyCapacity(lobby.Code, lobby.HostId, 4));
+    }
+
+    [Fact]
     public void OnlyHostCanStartAfterThreePlayersHaveJoined()
     {
         var manager = new LobbyManager();

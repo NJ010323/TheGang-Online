@@ -20,9 +20,11 @@ public class RoundTokenFactory : ITokenFactory
     /// <summary>Crée exactement un jeton par joueur, numéroté de 1 à l'effectif.</summary>
     public IReadOnlyList<Token> CreateTokens(int playerCount)
     {
-        if (playerCount is < 3 or > 6)
+        // La variante à deux joueurs n'est accessible qu'après une relève d'hôte ;
+        // le démarrage d'une partie ordinaire reste contrôlé à trois joueurs par Game.
+        if (playerCount is < 2 or > 6)
         {
-            throw new ArgumentOutOfRangeException(nameof(playerCount), "Le jeu de base accepte trois à six joueurs.");
+            throw new ArgumentOutOfRangeException(nameof(playerCount), "La table accepte deux à six joueurs actifs.");
         }
 
         var tokens = new List<Token>();

@@ -72,12 +72,17 @@ public partial class MainWindow
     /// <summary>Affiche à tous les joueurs absents et le temps restant avant la fermeture.</summary>
     private void UpdatePauseOverlay(LobbySnapshot lobby)
     {
-        if (lobby.Status != LobbyStatus.Started || lobby.AbsentPlayers.Count == 0)
+        if (lobby.AbsentPlayers.Count == 0)
         {
             PausedGameOverlay.Visibility = Visibility.Collapsed;
             return;
         }
         var names = string.Join(", ", lobby.AbsentPlayers.Select(player => player.Name));
+        PausedTitleText.Text = lobby.Status == LobbyStatus.Open
+            ? "◈  TABLE EN ATTENTE  ◈" : "◈  PARTIE EN PAUSE  ◈";
+        PausedExplanationText.Text = lobby.Status == LobbyStatus.Open
+            ? "Sa place reste réservée. L'équipe pourra lancer la partie lorsqu'elle sera au complet."
+            : "Les cartes et les jetons restent en place. La partie reprendra dès son retour.";
         PausedPlayerText.Text = lobby.AbsentPlayers.Count == 1
             ? $"{names} a quitté la partie. Nous attendons son retour."
             : $"{names} ont quitté la partie. Nous attendons leur retour.";

@@ -28,16 +28,22 @@ public partial class MainWindow
         if (intent != ExitIntent.Application && _session is null) return;
         _pendingExit = intent;
         var isHost = _session?.IsHost == true;
+        var canOfferRelief = isHost && _lastLobbySnapshot?.Players.Count > 1 &&
+            _lastRenderedPhase != Model.Game.GamePhase.Finished;
         var gameStarted = GamePanel.Visibility == Visibility.Visible ||
             _lastLobbyStatus == Model.Lobby.LobbyStatus.Started;
         var consequence = _session is null
             ? "Le jeu sera fermé."
             : gameStarted
                 ? isHost
-                    ? "Vous êtes l'hôte : la partie se terminera pour toute l'équipe."
+                    ? canOfferRelief
+                        ? "Le premier invité pourra reprendre l'hébergement. Le braquage en cours sera redistribué et les résultats acquis seront conservés."
+                        : "Vous êtes l'hôte : la partie se terminera pour toute l'équipe."
                     : "Votre place et vos cartes resteront réservées pendant deux minutes. L'équipe attendra votre retour."
                 : isHost
-                    ? "Vous êtes l'hôte : le lobby sera fermé pour tous les joueurs."
+                    ? canOfferRelief
+                        ? "Le premier invité pourra reprendre le lobby après votre départ."
+                        : "Vous êtes l'hôte : le lobby sera fermé pour tous les joueurs."
                     : "Votre place dans le lobby sera libérée.";
 
         ExitConfirmationTitle.Text = intent switch
@@ -53,13 +59,14 @@ public partial class MainWindow
         ExitConfirmationDetail.Text = consequence;
         CancelExitButton.Content = intent == ExitIntent.Application && _session is null
             ? "Rester dans le jeu" : "Rester à la table";
-        ConfirmExitButton.Content = intent switch
+        ConfirmExitButton.Content = canOfferRelief ? "Proposer la relève" : intent switch
         {
             ExitIntent.Application => "Quitter le jeu",
             ExitIntent.Lobby => "Quitter le lobby",
             _ => "Quitter la partie"
         };
         ConfirmExitButton.IsEnabled = !_busy;
+        ForceExitButton.Visibility = canOfferRelief ? Visibility.Visible : Visibility.Collapsed;
         ExitConfirmationOverlay.Visibility = Visibility.Visible;
         CancelExitButton.Focus();
     }
@@ -78,6 +85,27 @@ public partial class MainWindow
     {
         if (_busy || _pendingExit is not { } intent) return;
         DismissExitConfirmation();
+        // Le serveur décide avec sa liste actuelle. Le compteur du ListBox peut être
+        // momentanément vide ou périmé lors d'un changement d'écran.
+        if (_session is { IsHost: true } && intent != ExitIntent.Reconnect)
+        {
+            await RunAsync(() => MigrateHostAndExitAsync(intent), showProgress: false);
+            return;
+        }
+        await ExitWithoutMigrationAsync(intent);
+    }
+
+    /// <summary>Ferme explicitement l'ancienne table quand l'hôte renonce à la relève.</summary>
+    private async void ForceExit_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy || _pendingExit is not { } intent) return;
+        DismissExitConfirmation();
+        await ExitWithoutMigrationAsync(intent);
+    }
+
+    /// <summary>Conserve le comportement de sortie immédiate lorsque personne ne peut reprendre.</summary>
+    private async Task ExitWithoutMigrationAsync(ExitIntent intent)
+    {
         if (intent == ExitIntent.Application)
         {
             _applicationExitConfirmed = true;
