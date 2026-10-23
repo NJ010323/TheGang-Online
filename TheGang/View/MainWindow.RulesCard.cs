@@ -6,19 +6,19 @@ using Network;
 
 namespace View;
 
-/// <summary>Carte d'aide locale : déroulement des tours et exemples illustrés des mains de poker.</summary>
+/// <summary>Règles communes au menu principal et à la carte d'aide sur la table.</summary>
 public partial class MainWindow
 {
-    /// <summary>Crée le contenu une seule fois ; le petit rappel reste près de la main du joueur.</summary>
+    /// <summary>Crée les quatre tours et les combinaisons illustrées une seule fois.</summary>
     private void PopulateRulesCard()
     {
-        AddRound("01", "PRÉFLOP · BLANC", "Deux cartes privées ; choisissez votre jeton blanc.",
+        AddRound("01", "PRÉFLOP · BLANC", "Deux cartes privées ; jeton blanc.",
             Color.FromRgb(230, 230, 220));
-        AddRound("02", "FLOP · JAUNE", "Trois cartes communes ; choisissez votre jeton jaune.",
+        AddRound("02", "FLOP · JAUNE", "Trois cartes communes ; jeton jaune.",
             Color.FromRgb(238, 196, 78));
-        AddRound("03", "TURN · ORANGE", "Une quatrième carte commune ; choisissez votre jeton orange.",
+        AddRound("03", "TURN · ORANGE", "Quatrième carte commune ; jeton orange.",
             Color.FromRgb(237, 145, 63));
-        AddRound("04", "RIVER · ROUGE", "La cinquième carte commune ; choisissez votre jeton rouge.",
+        AddRound("04", "RIVER · ROUGE", "Cinquième carte commune ; jeton rouge.",
             Color.FromRgb(213, 72, 71));
 
         AddHand("Quinte flush royale", (10, CardColors.Coeur), (11, CardColors.Coeur),
@@ -46,7 +46,7 @@ public partial class MainWindow
     /// <summary>Ajoute un tour et la couleur du jeton correspondant dans la carte de règles.</summary>
     private void AddRound(string number, string title, string explanation, Color chipColor)
     {
-        var row = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+        var row = new Grid { Margin = new Thickness(0, 0, 0, 8) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.Children.Add(new Border
@@ -129,8 +129,8 @@ public partial class MainWindow
         PokerHandRowsPanel.Children.Add(row);
     }
 
-    /// <summary>Agrandit la carte de règles sans modifier la partie ni exposer les cartes adverses.</summary>
-    private void OpenRulesCard_Click(object sender, RoutedEventArgs e) =>
+    /// <summary>Ouvre les règles depuis le menu ou la table sans modifier la partie.</summary>
+    private void OpenRules_Click(object sender, RoutedEventArgs e) =>
         RulesOverlay.Visibility = Visibility.Visible;
 
     private void CloseRulesCard_Click(object sender, RoutedEventArgs e) => CloseRulesCard();

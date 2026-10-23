@@ -12,7 +12,13 @@ public sealed record JoinLobbyRequest(string Nickname, string InvitationSecret);
 public sealed record LobbyIdentity(string Code, Guid PlayerId, string SessionToken, LobbySnapshot Lobby);
 /// <summary>Vue publique du lobby, sans accès au moteur de jeu.</summary>
 public sealed record LobbySnapshot(string Code, Guid HostId, int MaxPlayers, LobbyStatus Status,
-    IReadOnlyList<LobbyParticipant> Players);
+    IReadOnlyList<LobbyParticipant> Players)
+{
+    /// <summary>Invités temporairement absents ; leur place reste réservée jusqu'à cette échéance.</summary>
+    public IReadOnlyList<AbsentPlayerSnapshot> AbsentPlayers { get; init; } = [];
+}
+/// <summary>Identité publique d'un invité attendu avant la fermeture de la partie.</summary>
+public sealed record AbsentPlayerSnapshot(Guid PlayerId, string Name, DateTimeOffset ReconnectUntilUtc);
 /// <summary>Carte transportée sous une forme sérialisable, sans interface métier.</summary>
 public sealed record CardSnapshot(CardColors Suit, int Rank);
 /// <summary>Jeton d'un joueur pendant le braquage actuel.</summary>

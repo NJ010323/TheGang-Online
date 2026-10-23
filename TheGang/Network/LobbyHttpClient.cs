@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Model.Lobby;
 
 namespace Network;
 
@@ -39,6 +40,33 @@ public sealed class LobbyHttpClient : IDisposable
         return identity;
     }
 
+    /// <summary>Réutilise la session d'un invité pour reprendre sa place et sa main sans nouvelle inscription.</summary>
+    public async Task<LobbyIdentity> ResumeAsync(string code, Guid playerId, string sessionToken,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(code) || playerId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(sessionToken))
+            throw new ArgumentException("Session de reprise incomplète.");
+        var placeholder = new LobbySnapshot(code, Guid.Empty, 0, LobbyStatus.Open, []);
+        SetIdentity(new LobbyIdentity(code, playerId, sessionToken, placeholder));
+        try
+        {
+            var identity = await GetAsync<LobbyIdentity>($"lobbies/{Code}/session", cancellationToken);
+            if (identity.PlayerId != playerId ||
+                !string.Equals(identity.Code, code, StringComparison.OrdinalIgnoreCase) ||
+                identity.Lobby.Status == LobbyStatus.Closed)
+                throw new LobbySessionClosedException(HttpStatusCode.Gone);
+            SetIdentity(identity);
+            return _identity!;
+        }
+        catch
+        {
+            _identity = null;
+            _http.DefaultRequestHeaders.Authorization = null;
+            throw;
+        }
+    }
+
     /// <summary>Actualise la liste publique des membres.</summary>
     public async Task<LobbySnapshot> GetLobbyAsync(CancellationToken cancellationToken = default) =>
         await GetAsync<LobbySnapshot>($"lobbies/{Code}", cancellationToken);
@@ -60,7 +88,7 @@ public sealed class LobbyHttpClient : IDisposable
     public async Task UpdateDragAsync(GameDragRequest drag, CancellationToken cancellationToken = default) =>
         await PostAsync<bool>($"lobbies/{Code}/game/drag", cancellationToken, drag);
 
-    /// <summary>Quitte le lobby ; une partie démarrée est fermée pour tous.</summary>
+    /// <summary>Quitte le lobby ; un invité en partie garde temporairement sa place.</summary>
     public async Task LeaveAsync(CancellationToken cancellationToken = default)
     {
         using var response = await _http.PostAsync($"lobbies/{Code}/leave", null, cancellationToken);
@@ -99,7 +127,7 @@ public sealed class LobbyHttpClient : IDisposable
     }
 
     /// <summary>Traduit une erreur HTTP en exception lisible.</summary>
-    private static async Task<T> ReadAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+    private async Task<T> ReadAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         await EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken)
@@ -107,9 +135,18 @@ public sealed class LobbyHttpClient : IDisposable
     }
 
     /// <summary>Inclut le message métier envoyé par le serveur en cas d'échec.</summary>
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    private async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode) return;
+        // Seule une réponse authentifiée du serveur du jeu peut prouver la fin de cette session.
+        // Une passerelle peut aussi retourner 404 ou 5xx lors d'une coupure passagère.
+        var sessionRejected = response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone ||
+            response.StatusCode == HttpStatusCode.Unauthorized &&
+            response.RequestMessage?.Method == HttpMethod.Get;
+        if (_identity is not null && sessionRejected &&
+            response.Headers.TryGetValues("X-TheGang-Server", out var origins) &&
+            origins.Contains("1"))
+            throw new LobbySessionClosedException(response.StatusCode);
         // Les passerelles de tunnel renvoient parfois une page HTML complète.
         // Elle n'est pas un message métier et ne doit jamais remplir l'interface.
         if ((int)response.StatusCode >= 500 || response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)

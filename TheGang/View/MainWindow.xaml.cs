@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -17,10 +18,12 @@ public partial class MainWindow : Window
 {
     // Une seule session peut être active dans cette fenêtre.
     private DesktopLobbySession? _session;
-    // Les instantanés réseau alimentent le plateau toutes les deux secondes.
+    // Le lobby est sondé toutes les deux secondes ; le plateau actif l'est plus souvent.
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     // Les confirmations brèves s'effacent ; les erreurs attendent une action du joueur.
     private readonly DispatcherTimer _noticeTimer = new() { Interval = TimeSpan.FromSeconds(5) };
+    // Une coupure passagère conserve l'identité du joueur et sa place pendant trente secondes.
+    private readonly LobbyReconnectWindow _reconnectWindow = new(TimeSpan.FromSeconds(30));
     private bool _connectionWarning;
     // Ces indicateurs empêchent de superposer des requêtes ou des actions utilisateur.
     private bool _refreshing;
@@ -57,6 +60,9 @@ public partial class MainWindow : Window
         OutcomeAlarmImage.Source = ResultCardVisuals.AlarmFace;
         TableSurface.SizeChanged += (_, _) => PositionHostActions();
         PopulateRulesCard();
+        RefreshResumeButton();
+        // Le menu de démarrage occupe tout l'écran ; le mode fenêtré reste accessible dans les paramètres.
+        SetFullScreen(true);
     }
 
     /// <summary>Garde la commande de l'hôte hors des cartes de résultat sur un plateau étroit.</summary>
@@ -108,8 +114,8 @@ public partial class MainWindow : Window
         HideNotice();
     }
 
-    /// <summary>Ferme le jeu via le menu.</summary>
-    private void Quit_Click(object sender, RoutedEventArgs e) => Close();
+    /// <summary>Demande confirmation avant de fermer toute l'application.</summary>
+    private void Quit_Click(object sender, RoutedEventArgs e) => ShowExitConfirmation(ExitIntent.Application);
 
     /// <summary>Ouvre les paramètres et ajoute la commande de sortie seulement pendant une partie.</summary>
     private void Settings_Click(object sender, RoutedEventArgs e)
@@ -120,6 +126,9 @@ public partial class MainWindow : Window
         AnimationsOffOption.IsChecked = !TableVisuals.AnimationsEnabled;
         GameSettingsSection.Visibility = GamePanel.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;
+        ExitGameHint.Text = _session?.IsHost == true
+            ? "Quitter met fin à la partie pour tous les joueurs."
+            : "Votre place sera gardée pendant deux minutes. Les autres joueurs attendront votre retour.";
         SettingsOverlay.Visibility = Visibility.Visible;
     }
 
@@ -147,7 +156,12 @@ public partial class MainWindow : Window
     /// <summary>F11 active le plein écran ; Échap en sort.</summary>
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F11)
+        if (e.Key == Key.Escape && ExitConfirmationOverlay.Visibility == Visibility.Visible)
+        {
+            DismissExitConfirmation();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F11)
         {
             SetFullScreen(!_isFullScreen);
             e.Handled = true;
@@ -216,6 +230,31 @@ public partial class MainWindow : Window
         EnterLobby();
     });
 
+    /// <summary>Retrouve automatiquement l'invitation et la place réservée du dernier invité.</summary>
+    private async void Resume_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
+    {
+        var ticket = GuestResumeStore.TryLoad();
+        if (ticket is null)
+        {
+            RefreshResumeButton();
+            throw new InvalidOperationException("Aucune partie à reprendre sur cet ordinateur.");
+        }
+        try
+        {
+            _session = await DesktopLobbySession.ResumeAsync(ticket.Invitation,
+                ticket.PlayerId, ticket.SessionToken);
+        }
+        catch (LobbySessionClosedException)
+        {
+            GuestResumeStore.Clear();
+            RefreshResumeButton();
+            throw new InvalidOperationException("Le délai de reprise est terminé ou la partie a été fermée.");
+        }
+        NicknameBox.Text = ticket.Nickname;
+        EnterLobby();
+        ShowNotice("Vous avez retrouvé votre place à la table.", NoticeLevel.Success);
+    });
+
     /// <summary>Affiche le lobby et commence à surveiller les changements de joueurs.</summary>
     private void EnterLobby()
     {
@@ -229,6 +268,29 @@ public partial class MainWindow : Window
         _lastRenderedPhase = null;
         _lastHeistNumber = 0;
         _lastSeenEventSequence = 0;
+        _reconnectWindow.Reset();
+        ReconnectOverlay.Visibility = Visibility.Collapsed;
+        PausedGameOverlay.Visibility = Visibility.Collapsed;
+        if (_session.IsHost)
+        {
+            GuestResumeStore.Clear();
+            RefreshResumeButton();
+        }
+        else if (_session.Client.Identity is { } identity)
+        {
+            try
+            {
+                GuestResumeStore.Save(new GuestResumeTicket(_session.Invitation, identity.PlayerId,
+                    identity.SessionToken, NicknameBox.Text.Trim()));
+                RefreshResumeButton();
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or
+                                          System.Security.Cryptography.CryptographicException)
+            {
+                ShowNotice("La reprise après fermeture n'a pas pu être enregistrée sur cet ordinateur.",
+                    NoticeLevel.Error, autoHide: false);
+            }
+        }
         _refreshTimer.Interval = TimeSpan.FromSeconds(2);
         _refreshTimer.Start();
         _ = RefreshAsync();
@@ -249,23 +311,11 @@ public partial class MainWindow : Window
         if (_session == session) RenderGame(game);
     });
 
-    /// <summary>Un départ volontaire ferme le lobby si le joueur est hôte.</summary>
-    private async void Leave_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
-    {
-        await _session!.Client.LeaveAsync();
-        await ReturnToMenuAsync(string.Empty);
-    });
+    /// <summary>Confirme le départ du lobby avant d'avertir le serveur.</summary>
+    private void Leave_Click(object sender, RoutedEventArgs e) => ShowExitConfirmation(ExitIntent.Lobby);
 
-    /// <summary>Une partie commencée s'achève pour tous si un joueur la quitte.</summary>
-    private async void ExitGame_Click(object sender, RoutedEventArgs e)
-    {
-        SettingsOverlay.Visibility = Visibility.Collapsed;
-        await RunAsync(async () =>
-        {
-            await _session!.Client.LeaveAsync();
-            await ReturnToMenuAsync("La partie a été fermée pour tous les joueurs.");
-        });
-    }
+    /// <summary>L'hôte ferme la partie ; un invité garde sa place pendant le délai de reprise.</summary>
+    private void ExitGame_Click(object sender, RoutedEventArgs e) => ShowExitConfirmation(ExitIntent.Game);
 
     /// <summary>Agrandit le tapis ou réaffiche le détail de tous les jetons.</summary>
     private void HistoryToggle_Click(object sender, RoutedEventArgs e) =>
@@ -283,7 +333,7 @@ public partial class MainWindow : Window
     /// <summary>Interroge périodiquement l'hôte pour mettre à jour lobby et partie.</summary>
     private async void RefreshTimer_Tick(object? sender, EventArgs e) => await RefreshAsync();
 
-    /// <summary>Revient au menu si l'hôte ferme son application ou perd le tunnel.</summary>
+    /// <summary>Actualise la session et tente sa reprise si le tunnel cesse temporairement de répondre.</summary>
     private async Task RefreshAsync()
     {
         if (_refreshing || _session is null || _busy || _draggedTokenValue is not null) return;
@@ -306,16 +356,23 @@ public partial class MainWindow : Window
                 if (game.RecentEvents.LastOrDefault()?.Sequence < _lastSeenEventSequence) return;
                 RenderGame(game);
             }
-            if (_connectionWarning)
+            UpdatePauseOverlay(lobby);
+            if (_reconnectWindow.IsActive) EndReconnection(lobby.Status);
+            else if (_connectionWarning)
             {
                 _connectionWarning = false;
                 HideNotice();
             }
         }
-        catch (Exception error) when (_session == session && !session.IsHost &&
+        catch (Exception error) when (_session == session &&
+                                      LobbyConnectionFailure.IsSessionClosed(error))
+        {
+            await ReturnToMenuAsync("La partie est terminée : l'hôte l'a fermée ou le délai de reprise a expiré.");
+        }
+        catch (Exception error) when (_session == session &&
                                       LobbyConnectionFailure.IsHostUnavailable(error))
         {
-            await ReturnToMenuAsync("La partie s'est terminée : l'hôte ou un joueur a quitté la table.");
+            await HandleReconnectFailureAsync(session);
         }
         catch (Exception error)
         {
@@ -656,7 +713,7 @@ public partial class MainWindow : Window
     {
         if (_busy) return;
         _busy = true;
-        CreateButton.IsEnabled = JoinButton.IsEnabled = StartButton.IsEnabled = false;
+        CreateButton.IsEnabled = JoinButton.IsEnabled = ResumeButton.IsEnabled = StartButton.IsEnabled = false;
         HostActions.IsEnabled = false;
         try
         {
@@ -665,16 +722,22 @@ public partial class MainWindow : Window
             await operation();
             if (StatusText.Text == "Action en cours…") HideNotice();
         }
-        catch (Exception error) when (_session is { IsHost: false } &&
+        catch (Exception error) when (_session is not null &&
+                                      LobbyConnectionFailure.IsSessionClosed(error))
+        {
+            await ReturnToMenuAsync("La partie est terminée : l'hôte l'a fermée ou le délai de reprise a expiré.");
+        }
+        catch (Exception error) when (_session is not null &&
                                       LobbyConnectionFailure.IsHostUnavailable(error))
         {
-            await ReturnToMenuAsync("La partie s'est terminée : l'hôte ou un joueur a quitté la table.");
+            await HandleReconnectFailureAsync(_session);
         }
         catch (Exception error) { ShowNotice(error.Message, NoticeLevel.Error, autoHide: false); }
         finally
         {
             _busy = false;
-            CreateButton.IsEnabled = JoinButton.IsEnabled = true;
+            ConfirmExitButton.IsEnabled = true;
+            CreateButton.IsEnabled = JoinButton.IsEnabled = ResumeButton.IsEnabled = true;
             HostActions.IsEnabled = true;
             if (_session is { IsHost: true } && LobbyPanel.Visibility == Visibility.Visible)
                 StartButton.IsEnabled = PlayersList.Items.Count >= 3;
@@ -691,7 +754,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Nettoie les informations de la partie et réaffiche l'accueil.</summary>
-    private async Task ReturnToMenuAsync(string message)
+    private async Task ReturnToMenuAsync(string message, bool preserveGuestResume = false)
     {
         if (_draggedTokenValue is not null) EndChipDrag();
         StopCardDeal();
@@ -702,6 +765,7 @@ public partial class MainWindow : Window
         UpdateConfirmCue(false);
         CloseRulesCard();
         SettingsOverlay.Visibility = Visibility.Collapsed;
+        DismissExitConfirmation();
         await CloseSessionAsync();
         MenuPanel.Visibility = Visibility.Visible;
         EntryPanel.Visibility = LobbyPanel.Visibility = GamePanel.Visibility = Visibility.Collapsed;
@@ -729,6 +793,11 @@ public partial class MainWindow : Window
         _visibleHands.Clear();
         ResetScoreCards();
         _connectionWarning = false;
+        _reconnectWindow.Reset();
+        ReconnectOverlay.Visibility = Visibility.Collapsed;
+        PausedGameOverlay.Visibility = Visibility.Collapsed;
+        if (!preserveGuestResume) GuestResumeStore.Clear();
+        RefreshResumeButton();
         if (string.IsNullOrWhiteSpace(message)) HideNotice();
         else ShowNotice(message, NoticeLevel.Info, autoHide: false);
     }

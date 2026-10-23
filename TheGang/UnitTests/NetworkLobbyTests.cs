@@ -43,6 +43,7 @@ public class NetworkLobbyTests
         Assert.Equal((HttpStatusCode)530, error.StatusCode);
         Assert.DoesNotContain("<html>", error.Message);
         Assert.True(LobbyConnectionFailure.IsHostUnavailable(error));
+        Assert.False(LobbyConnectionFailure.IsSessionClosed(error));
         Assert.False(LobbyConnectionFailure.IsHostUnavailable(
             new HttpRequestException("Commande impossible", null, HttpStatusCode.Conflict)));
     }
@@ -58,13 +59,14 @@ public class NetworkLobbyTests
 
         await host.LeaveAsync();
 
-        var error = await Assert.ThrowsAsync<HttpRequestException>(() => guest.GetLobbyAsync());
+        var error = await Assert.ThrowsAsync<LobbySessionClosedException>(() => guest.GetLobbyAsync());
         Assert.Equal(HttpStatusCode.NotFound, error.StatusCode);
-        Assert.True(LobbyConnectionFailure.IsHostUnavailable(error));
+        Assert.True(LobbyConnectionFailure.IsSessionClosed(error));
+        Assert.False(LobbyConnectionFailure.IsHostUnavailable(error));
     }
 
     [Fact]
-    public async Task LeavingStartedGameClosesItForTheOtherPlayers()
+    public async Task GuestLeavingPausesTheGameAndCanResumeTheSameHand()
     {
         await using var server = await LobbyHttpServer.StartAsync("Host", 3);
         using var host = new LobbyHttpClient(server.LocalAddress);
@@ -74,11 +76,112 @@ public class NetworkLobbyTests
         await bob.JoinAsync("Bob", server.Lobby.InvitationSecret);
         await chloe.JoinAsync("Chloe", server.Lobby.InvitationSecret);
         await host.StartAsync();
+        var identity = bob.Identity!;
+        var originalHand = (await bob.GetGameAsync()).Players.Single(player => player.Id == identity.PlayerId).Hand;
 
         await bob.LeaveAsync();
 
-        var error = await Assert.ThrowsAsync<HttpRequestException>(() => host.GetLobbyAsync());
-        Assert.Equal(HttpStatusCode.NotFound, error.StatusCode);
+        var paused = await host.GetLobbyAsync();
+        var absent = Assert.Single(paused.AbsentPlayers);
+        Assert.Equal("Bob", absent.Name);
+        Assert.Equal(identity.PlayerId, absent.PlayerId);
+        Assert.InRange(absent.ReconnectUntilUtc - DateTimeOffset.UtcNow,
+            TimeSpan.FromSeconds(110), TimeSpan.FromMinutes(2));
+        var blocked = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            host.ApplyAsync(new GameActionRequest(GameAction.TakeToken, 1)));
+        Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+
+        using var resumed = new LobbyHttpClient(server.LocalAddress);
+        await resumed.ResumeAsync(identity.Code, identity.PlayerId, identity.SessionToken);
+        var resumedHand = (await resumed.GetGameAsync()).Players.Single(player => player.Id == identity.PlayerId).Hand;
+        Assert.Equal(originalHand, resumedHand);
+        Assert.Empty((await host.GetLobbyAsync()).AbsentPlayers);
+        await host.ApplyAsync(new GameActionRequest(GameAction.TakeToken, 1));
+
+        using var wrongIdentity = new LobbyHttpClient(server.LocalAddress);
+        await Assert.ThrowsAsync<LobbySessionClosedException>(() => wrongIdentity.ResumeAsync(
+            identity.Code, chloe.Identity!.PlayerId, identity.SessionToken));
+    }
+
+    [Fact]
+    public void SilentGuestIsDetectedAndGracePeriodEventuallyClosesTheLobby()
+    {
+        var clock = new AdjustableClock(new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero));
+        var lobby = new HostedLobby("Host", 3, clock);
+        var bob = lobby.Join("Bob", lobby.InvitationSecret);
+        lobby.Join("Chloe", lobby.InvitationSecret);
+        lobby.Start(lobby.Code, lobby.HostIdentity.SessionToken);
+
+        clock.Advance(TimeSpan.FromSeconds(9));
+        var paused = lobby.GetLobby(lobby.Code, lobby.HostIdentity.SessionToken);
+        Assert.Equal(2, paused.AbsentPlayers.Count);
+        Assert.All(paused.AbsentPlayers, player => Assert.Equal(
+            new DateTimeOffset(2026, 10, 23, 12, 2, 8, TimeSpan.Zero), player.ReconnectUntilUtc));
+        Assert.Throws<InvalidOperationException>(() => lobby.Apply(lobby.Code,
+            lobby.HostIdentity.SessionToken, new GameActionRequest(GameAction.TakeToken, 1)));
+
+        clock.Advance(TimeSpan.FromSeconds(110));
+        lobby.GetLobby(lobby.Code, bob.SessionToken);
+        Assert.Single(lobby.GetLobby(lobby.Code, lobby.HostIdentity.SessionToken).AbsentPlayers);
+        clock.Advance(TimeSpan.FromSeconds(10));
+        Assert.Throws<KeyNotFoundException>(() => lobby.GetLobby(lobby.Code,
+            lobby.HostIdentity.SessionToken));
+    }
+
+    [Fact]
+    public async Task TemporaryGatewayFailurePreservesTheGuestIdentityAndReturnsToTheSameGame()
+    {
+        await using var server = await LobbyHttpServer.StartAsync("Host", 3);
+        using var host = new LobbyHttpClient(server.LocalAddress);
+        using var gateway = new IntermittentGatewayHandler();
+        using var guest = new LobbyHttpClient(server.LocalAddress, gateway);
+        host.SetHostIdentity(server.Lobby.HostIdentity);
+        await guest.JoinAsync("Guest", server.Lobby.InvitationSecret);
+        var identity = guest.Identity;
+
+        gateway.FailNextRequests = 2;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var error = await Assert.ThrowsAsync<HttpRequestException>(() => guest.GetLobbyAsync());
+            Assert.True(LobbyConnectionFailure.IsHostUnavailable(error));
+            Assert.False(LobbyConnectionFailure.IsSessionClosed(error));
+        }
+
+        Assert.Equal(identity, guest.Identity);
+        Assert.Contains((await guest.GetLobbyAsync()).Players, player => player.Id == identity!.PlayerId);
+        Assert.Equal(identity, guest.Identity);
+    }
+
+    [Fact]
+    public async Task GatewayNotFoundDoesNotProveThatTheHostClosedTheLobby()
+    {
+        await using var server = await LobbyHttpServer.StartAsync("Host", 3);
+        using var gateway = new IntermittentGatewayHandler { FailureStatus = HttpStatusCode.NotFound };
+        using var guest = new LobbyHttpClient(server.LocalAddress, gateway);
+        await guest.JoinAsync("Guest", server.Lobby.InvitationSecret);
+        gateway.FailNextRequests = 1;
+
+        var error = await Assert.ThrowsAsync<HttpRequestException>(() => guest.GetLobbyAsync());
+        Assert.True(LobbyConnectionFailure.IsHostUnavailable(error));
+        Assert.False(LobbyConnectionFailure.IsSessionClosed(error));
+        Assert.Equal(server.Lobby.Code, (await guest.GetLobbyAsync()).Code);
+    }
+
+    [Fact]
+    public void ReconnectionWindowExpiresOnlyAfterContinuousFailure()
+    {
+        var window = new LobbyReconnectWindow(TimeSpan.FromSeconds(30));
+        var start = new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero);
+        window.Start(start);
+        window.Start(start.AddSeconds(20));
+
+        Assert.True(window.IsActive);
+        Assert.False(window.IsExpired(start.AddSeconds(29)));
+        Assert.True(window.IsExpired(start.AddSeconds(30)));
+        window.Reset();
+        Assert.False(window.IsActive);
+        window.Start(start.AddSeconds(45));
+        Assert.False(window.IsExpired(start.AddSeconds(45)));
     }
 
     [Fact]
@@ -100,7 +203,9 @@ public class NetworkLobbyTests
         await bob.JoinAsync("Bob", server.Lobby.InvitationSecret);
         await chloe.JoinAsync("Chloe", server.Lobby.InvitationSecret);
         Assert.Equal(3, (await host.GetLobbyAsync()).Players.Count);
-        await Assert.ThrowsAsync<HttpRequestException>(() => bob.StartAsync());
+        var deniedStart = await Assert.ThrowsAsync<HttpRequestException>(() => bob.StartAsync());
+        Assert.Equal(HttpStatusCode.Forbidden, deniedStart.StatusCode);
+        Assert.False(LobbyConnectionFailure.IsHostUnavailable(deniedStart));
         using var extra = new LobbyHttpClient(server.LocalAddress);
         await Assert.ThrowsAsync<HttpRequestException>(() =>
             extra.JoinAsync("Other", server.Lobby.InvitationSecret));
@@ -341,6 +446,14 @@ public class NetworkLobbyTests
         Assert.True((await clients[0].GetGameAsync()).AllChoicesConfirmed);
     }
 
+    /// <summary>Contrôle le délai de reprise sans attendre réellement deux minutes dans les tests.</summary>
+    private sealed class AdjustableClock(DateTimeOffset now) : TimeProvider
+    {
+        private DateTimeOffset _now = now;
+        public override DateTimeOffset GetUtcNow() => _now;
+        public void Advance(TimeSpan duration) => _now += duration;
+    }
+
     /// <summary>Reproduit la page HTML renvoyée par Cloudflare après l'arrêt du tunnel.</summary>
     private sealed class HtmlTunnelErrorHandler : HttpMessageHandler
     {
@@ -349,5 +462,31 @@ public class NetworkLobbyTests
         {
             Content = new StringContent("<html>Une très longue page d'erreur du tunnel</html>")
         });
+    }
+
+    /// <summary>Interrompt quelques requêtes puis transmet les suivantes au même serveur local.</summary>
+    private sealed class IntermittentGatewayHandler : HttpMessageHandler
+    {
+        private readonly HttpMessageInvoker _upstream = new(new HttpClientHandler());
+
+        public int FailNextRequests { get; set; }
+        public HttpStatusCode FailureStatus { get; set; } = (HttpStatusCode)530;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (FailNextRequests-- > 0)
+                return Task.FromResult(new HttpResponseMessage(FailureStatus)
+                {
+                    Content = new StringContent("<html>Passerelle indisponible</html>")
+                });
+            return _upstream.SendAsync(request, cancellationToken);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _upstream.Dispose();
+            base.Dispose(disposing);
+        }
     }
 }

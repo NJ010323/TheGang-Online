@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -51,6 +52,12 @@ public sealed class LobbyHttpServer : IAsyncDisposable
             });
         });
         var app = builder.Build();
+        // Permet au client de distinguer la fermeture du jeu d'une page d'erreur du tunnel.
+        app.Use(async (context, next) =>
+        {
+            context.Response.Headers["X-TheGang-Server"] = "1";
+            await next(context);
+        });
         MapEndpoints(app, lobby);
         await app.StartAsync(cancellationToken);
         var address = app.Urls.Single(url => url.StartsWith("http://127.0.0.1:", StringComparison.Ordinal));
@@ -70,6 +77,8 @@ public sealed class LobbyHttpServer : IAsyncDisposable
             .RequireRateLimiting("join");
         app.MapGet("/lobbies/{code}", (string code, HttpRequest request) =>
             Respond(() => lobby.GetLobby(code, SessionToken(request))));
+        app.MapGet("/lobbies/{code}/session", (string code, HttpRequest request) =>
+            Respond(() => lobby.Resume(code, SessionToken(request))));
         app.MapPost("/lobbies/{code}/leave", (string code, HttpRequest request) =>
             Respond(() => { lobby.Leave(code, SessionToken(request)); return true; }));
         app.MapPost("/lobbies/{code}/start", (string code, HttpRequest request) =>
@@ -98,6 +107,7 @@ public sealed class LobbyHttpServer : IAsyncDisposable
     {
         try { return Results.Ok(action()); }
         catch (UnauthorizedAccessException) { return Results.Unauthorized(); }
+        catch (SecurityException) { return Results.StatusCode(StatusCodes.Status403Forbidden); }
         catch (KeyNotFoundException) { return Results.NotFound(); }
         catch (ArgumentException error) { return Results.BadRequest(new { error = error.Message }); }
         catch (InvalidOperationException error) { return Results.Conflict(new { error = error.Message }); }

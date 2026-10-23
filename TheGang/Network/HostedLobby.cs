@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Security;
 using System.Text;
 using Model.Game;
 using Model.Game.Cards.Interfaces;
@@ -14,6 +15,11 @@ public sealed class HostedLobby
     private readonly LobbyManager _manager = new();
     // Les jetons de session ne sont jamais communiqués aux autres joueurs.
     private readonly Dictionary<string, Guid> _sessions = new(StringComparer.Ordinal);
+    private readonly Dictionary<Guid, DateTimeOffset> _lastSeenGuests = [];
+    private readonly Dictionary<Guid, DateTimeOffset> _absentUntil = [];
+    private readonly TimeProvider _clock;
+    private static readonly TimeSpan HeartbeatTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan ReconnectGrace = TimeSpan.FromMinutes(2);
     private readonly Lobby _lobby;
     private Game? _game;
     // L'hôte ordonne les actions ; chaque client peut rejouer les dernières animations après un sondage réseau.
@@ -27,8 +33,9 @@ public sealed class HostedLobby
     private const int MaxCompletedDrags = 256;
 
     /// <summary>Crée le lobby et l'identité initiale de l'hôte.</summary>
-    public HostedLobby(string hostNickname, int maxPlayers)
+    public HostedLobby(string hostNickname, int maxPlayers, TimeProvider? clock = null)
     {
+        _clock = clock ?? TimeProvider.System;
         _lobby = _manager.CreateLobby(hostNickname, maxPlayers);
         InvitationSecret = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
         HostIdentity = NewIdentity(_lobby.HostId);
@@ -53,7 +60,9 @@ public sealed class HostedLobby
             if (!CryptographicOperations.FixedTimeEquals(expected, provided))
                 throw new UnauthorizedAccessException("Invitation invalide.");
             var player = _manager.JoinLobby(Code, nickname);
-            return NewIdentity(player.Id);
+            var identity = NewIdentity(player.Id);
+            _lastSeenGuests[player.Id] = _clock.GetUtcNow();
+            return identity;
         }
     }
 
@@ -67,22 +76,27 @@ public sealed class HostedLobby
         }
     }
 
-    /// <summary>Retire un invité avant le départ ; après le départ, un abandon ferme la partie pour tous.</summary>
+    /// <summary>Libère une place avant le départ ou la réserve pendant la partie pour une reprise.</summary>
     public void Leave(string code, string sessionToken)
     {
         lock (_sync)
         {
-            var playerId = EnsureMember(code, sessionToken);
-            if (playerId == _lobby.HostId || _lobby.Status == LobbyStatus.Started)
+            var playerId = EnsureMember(code, sessionToken, markPresent: false);
+            if (playerId == _lobby.HostId)
             {
-                // Le moteur garde un nombre fixe de joueurs pendant une partie.
                 _manager.CloseLobby(Code, _lobby.HostId);
                 _sessions.Clear();
+            }
+            else if (_lobby.Status == LobbyStatus.Started)
+            {
+                // Le moteur conserve la main et les jetons du joueur pendant sa courte absence.
+                MarkAbsent(playerId, _clock.GetUtcNow());
             }
             else
             {
                 _manager.LeaveLobby(Code, playerId);
                 _sessions.Remove(sessionToken);
+                _lastSeenGuests.Remove(playerId);
             }
         }
     }
@@ -101,6 +115,7 @@ public sealed class HostedLobby
             _completedDrags.Clear();
             _completedDragOrder.Clear();
             RecordEvent(GameEventKind.HeistStarted, playerId, _game);
+            RefreshPresence(_clock.GetUtcNow());
             return GameSnapshotFor(playerId);
         }
     }
@@ -118,6 +133,7 @@ public sealed class HostedLobby
         lock (_sync)
         {
             var playerId = EnsureMember(code, sessionToken);
+            EnsureAllPlayersPresent();
             var game = _game ?? throw new InvalidOperationException("La partie n'a pas commencé.");
             if (request.GestureId == Guid.Empty || request.Revision < 1)
                 throw new ArgumentException("Geste de jeton invalide.");
@@ -158,6 +174,7 @@ public sealed class HostedLobby
         lock (_sync)
         {
             var playerId = EnsureMember(code, sessionToken);
+            EnsureAllPlayersPresent();
             var game = _game ?? throw new InvalidOperationException("La partie n'a pas commencé.");
             switch (request.Action)
             {
@@ -262,12 +279,58 @@ public sealed class HostedLobby
     }
 
     /// <summary>Vérifie le code et le jeton avant chaque opération.</summary>
-    private Guid EnsureMember(string code, string sessionToken)
+    private Guid EnsureMember(string code, string sessionToken, bool markPresent = true)
     {
+        var now = _clock.GetUtcNow();
+        RefreshPresence(now);
         EnsureCode(code);
-        return _sessions.TryGetValue(sessionToken, out var playerId)
-            ? playerId
-            : throw new UnauthorizedAccessException("Session de joueur inconnue.");
+        if (!_sessions.TryGetValue(sessionToken, out var playerId))
+            throw new UnauthorizedAccessException("Session de joueur inconnue.");
+        if (markPresent && playerId != _lobby.HostId)
+        {
+            _lastSeenGuests[playerId] = now;
+            _absentUntil.Remove(playerId);
+        }
+        return playerId;
+    }
+
+    /// <summary>Rend son identité à une session existante et retire sa marque d'absence.</summary>
+    public LobbyIdentity Resume(string code, string sessionToken)
+    {
+        lock (_sync)
+        {
+            var playerId = EnsureMember(code, sessionToken);
+            return new LobbyIdentity(Code, playerId, sessionToken, Snapshot());
+        }
+    }
+
+    /// <summary>Détecte les invités silencieux et ferme la partie à la fin de leur délai.</summary>
+    private void RefreshPresence(DateTimeOffset now)
+    {
+        if (_lobby.Status != LobbyStatus.Started) return;
+        foreach (var (playerId, lastSeen) in _lastSeenGuests)
+            if (!_absentUntil.ContainsKey(playerId) && now - lastSeen >= HeartbeatTimeout)
+                MarkAbsent(playerId, lastSeen + HeartbeatTimeout);
+        if (_absentUntil.Values.Any(until => now >= until))
+        {
+            _manager.CloseLobby(Code, _lobby.HostId);
+            _sessions.Clear();
+            _absentUntil.Clear();
+        }
+    }
+
+    /// <summary>Interrompt les gestes en cours et réserve la place de l'invité absent.</summary>
+    private void MarkAbsent(Guid playerId, DateTimeOffset since)
+    {
+        _absentUntil.TryAdd(playerId, since + ReconnectGrace);
+        CompletePlayerGesture(playerId);
+    }
+
+    /// <summary>Empêche toute modification du moteur tant qu'une place est inoccupée.</summary>
+    private void EnsureAllPlayersPresent()
+    {
+        if (_absentUntil.Count != 0)
+            throw new InvalidOperationException("La partie est en pause : un joueur est absent.");
     }
 
     /// <summary>Compare les codes sans distinction de casse.</summary>
@@ -282,12 +345,16 @@ public sealed class HostedLobby
     private void EnsureHost(Guid playerId)
     {
         if (playerId != _lobby.HostId)
-            throw new UnauthorizedAccessException("Seul l'hôte peut effectuer cette action.");
+            throw new SecurityException("Seul l'hôte peut effectuer cette action.");
     }
 
     /// <summary>Construit une copie de la liste publique des membres.</summary>
     private LobbySnapshot Snapshot() =>
-        new(Code, _lobby.HostId, _lobby.MaxPlayers, _lobby.Status, _lobby.Players);
+        new(Code, _lobby.HostId, _lobby.MaxPlayers, _lobby.Status, _lobby.Players)
+        {
+            AbsentPlayers = _absentUntil.Select(entry => new AbsentPlayerSnapshot(entry.Key,
+                _lobby.Players.First(player => player.Id == entry.Key).Name, entry.Value)).ToArray()
+        };
 
     /// <summary>Fait avancer d'une étape seulement après les confirmations du moteur.</summary>
     private static void AdvanceRound(Game game)

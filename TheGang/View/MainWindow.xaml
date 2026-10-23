@@ -355,26 +355,32 @@
                     </LinearGradientBrush>
                 </Rectangle.Fill>
             </Rectangle>
-            <Grid Margin="80,50">
+            <Grid Margin="80,26">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="2*" />
                     <ColumnDefinition Width="3*" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Width="530" HorizontalAlignment="Left" VerticalAlignment="Center">
                     <TextBlock Text="UN BRAQUAGE. UNE SEULE ÉQUIPE." Foreground="#F0C86A"
-                               FontSize="15" FontWeight="Bold" Margin="0,0,0,18" />
+                               FontSize="15" FontWeight="Bold" Margin="0,0,0,14" />
                     <TextBlock Text="Lisez vos cartes.&#10;Classez vos forces.&#10;Gagnez ensemble."
-                               FontSize="40" FontFamily="Georgia" FontWeight="Bold" LineHeight="54"
-                               TextWrapping="Wrap" Margin="0,0,0,25" />
+                               FontSize="38" FontFamily="Georgia" FontWeight="Bold" LineHeight="50"
+                               TextWrapping="Wrap" Margin="0,0,0,20" />
                     <TextBlock Text="De 3 à 6 joueurs. Créez un lobby, partagez l'invitation et prenez place autour de la table."
                                Foreground="#DFD0BC" FontSize="17" TextWrapping="Wrap" Width="465"
-                               HorizontalAlignment="Left" Margin="0,0,0,32" />
+                               HorizontalAlignment="Left" Margin="0,0,0,22" />
                     <Button Content="Héberger une partie" Width="270" HorizontalAlignment="Left"
-                            Style="{StaticResource ActionButton}" Click="HostMenu_Click" />
+                            Style="{StaticResource ActionButton}" Margin="0,0,0,7" Click="HostMenu_Click" />
                     <Button Content="Rejoindre une partie" Width="270" HorizontalAlignment="Left"
-                            Style="{StaticResource QuietButton}" Click="JoinMenu_Click" />
+                            Style="{StaticResource QuietButton}" Margin="0,0,0,7" Click="JoinMenu_Click" />
+                    <Button x:Name="ResumeButton" Content="Reprendre ma partie" Width="270"
+                            HorizontalAlignment="Left" Visibility="Collapsed"
+                            Style="{StaticResource ActionButton}" Margin="0,0,0,7" Click="Resume_Click" />
+                    <Button Content="Règles du jeu" Width="270" HorizontalAlignment="Left"
+                            AutomationProperties.Name="Afficher les règles du jeu"
+                            Style="{StaticResource QuietButton}" Margin="0,0,0,7" Click="OpenRules_Click" />
                     <Button Content="Quitter le jeu" Width="270" HorizontalAlignment="Left"
-                            Style="{StaticResource QuietButton}" Click="Quit_Click" />
+                            Style="{StaticResource QuietButton}" Margin="0,0,0,7" Click="Quit_Click" />
                 </StackPanel>
                 <Grid Grid.Column="1" Width="500" Height="480" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Image Source="Assets/card-back.png" Width="205" Height="310" HorizontalAlignment="Center"
@@ -585,7 +591,7 @@
                             <Button x:Name="RulesCardButton" Canvas.Left="778" Canvas.Top="550"
                                     Width="128" Height="140" Cursor="Hand"
                                     AutomationProperties.Name="Agrandir la carte des règles"
-                                    Click="OpenRulesCard_Click">
+                                    Click="OpenRules_Click">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
                                         <Border x:Name="RulesFrame" CornerRadius="8" Background="#D6AC61"
@@ -821,7 +827,7 @@
         </Grid>
 
         <!-- Panneau modal des réglages, disponible depuis tous les écrans. -->
-        <Grid x:Name="SettingsOverlay" Grid.RowSpan="2" Panel.ZIndex="20" Visibility="Collapsed"
+        <Grid x:Name="SettingsOverlay" Grid.RowSpan="2" Panel.ZIndex="55" Visibility="Collapsed"
               Background="#D0080708">
             <Border Width="570" Padding="35" Background="#191112" BorderBrush="#A8874C"
                     BorderThickness="1.5" CornerRadius="16" HorizontalAlignment="Center"
@@ -856,7 +862,7 @@
                     <StackPanel x:Name="GameSettingsSection" Visibility="Collapsed" Margin="0,25,0,0">
                         <TextBlock Text="PARTIE EN COURS" Foreground="#F0C86A"
                                    FontWeight="Bold" FontSize="14" />
-                        <TextBlock Text="Quitter met fin à la partie pour tous les joueurs."
+                        <TextBlock x:Name="ExitGameHint" Text="Quitter met fin à la partie pour tous les joueurs."
                                    Foreground="#C9BBA6" TextWrapping="Wrap" Margin="0,5,0,13" />
                         <Button Content="Quitter la partie" Style="{StaticResource TableDangerButton}"
                                 HorizontalAlignment="Left" AutomationProperties.Name="Quitter la partie"
@@ -972,7 +978,7 @@
             </Viewbox>
         </Grid>
 
-        <!-- Aide illustrée de la partie, ouverte depuis la carte voisine de la main locale. -->
+        <!-- Règles illustrées, accessibles depuis le menu et depuis la carte voisine de la main. -->
         <Grid x:Name="RulesOverlay" Grid.RowSpan="2" Panel.ZIndex="50" Visibility="Collapsed"
               Background="#EC080708">
             <Border MaxWidth="1120" MaxHeight="760" Margin="24" Padding="24"
@@ -984,7 +990,7 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <Grid Margin="0,0,0,14">
-                        <TextBlock Text="CARTE D'AIDE  ·  THE GANG" FontFamily="Georgia"
+                        <TextBlock Text="RÈGLES DU JEU  ·  THE GANG" FontFamily="Georgia"
                                    FontSize="27" FontWeight="Bold" Foreground="#F5D17B"
                                    VerticalAlignment="Center" />
                         <Button Content="Fermer" Style="{StaticResource TableButton}"
@@ -1002,18 +1008,25 @@
                                     CornerRadius="10" Padding="18"
                                     Margin="0,0,10,0">
                                 <StackPanel>
-                                    <TextBlock Text="DÉROULEMENT" Foreground="#3E2721"
+                                    <TextBlock Text="VOTRE MISSION" Foreground="#3E2721"
                                                FontSize="22" FontWeight="Bold" FontFamily="Georgia" />
-                                    <TextBlock Text="Classez ensemble vos mains de la plus faible à la plus forte."
+                                    <TextBlock Text="De 3 à 6 joueurs, classez vos mains de la plus faible à la plus forte. Chacun a deux cartes privées ; les cartes communes servent à tous."
                                                Foreground="#49352A" FontSize="16" TextWrapping="Wrap"
-                                               Margin="0,8,0,14" />
+                                               Margin="0,8,0,9" />
                                     <StackPanel x:Name="RuleRoundsPanel" />
+                                    <TextBlock Text="JETONS ET ACCORD" Foreground="#622C24" FontSize="17"
+                                               FontWeight="Bold" Margin="0,6,0,5" />
+                                    <TextBlock Text="À chaque tour, prenez un jeton au centre : 1 pour la main supposée la plus faible, le plus grand pour la plus forte. Vous pouvez rendre ou reprendre un jeton."
+                                               Foreground="#49352A" TextWrapping="Wrap" FontSize="15" />
+                                    <TextBlock Text="Quand chacun a un jeton, confirmez. Tout échange annule l'accord ; l'hôte passe à la suite après la confirmation de tous."
+                                               Foreground="#49352A" TextWrapping="Wrap" FontSize="15"
+                                               Margin="0,5,0,0" />
                                     <TextBlock Text="RÉVÉLATION" Foreground="#622C24" FontSize="17"
-                                               FontWeight="Bold" Margin="0,16,0,5" />
-                                    <TextBlock Text="Après les jetons rouges, révélez les mains dans l'ordre 1, 2, 3… Une erreur dans le classement déclenche une alarme."
+                                               FontWeight="Bold" Margin="0,8,0,5" />
+                                    <TextBlock Text="Après l'accord sur les jetons rouges, les mains se dévoilent de 1 à N. Elles doivent être de plus en plus fortes ; les égalités passent. Une erreur déclenche une alarme."
                                                Foreground="#49352A" TextWrapping="Wrap" FontSize="15" />
                                     <TextBlock Text="OUVRIR LE COFFRE" Foreground="#622C24" FontSize="17"
-                                               FontWeight="Bold" Margin="0,16,0,5" />
+                                               FontWeight="Bold" Margin="0,8,0,5" />
                                     <TextBlock Text="Retournez trois cartes d'or pour gagner. Trois alarmes mettent fin à la partie."
                                                Foreground="#49352A" TextWrapping="Wrap" FontSize="15" />
                                 </StackPanel>
@@ -1031,6 +1044,89 @@
                         </Grid>
                     </Viewbox>
                 </Grid>
+            </Border>
+        </Grid>
+
+        <!-- La session reste en mémoire pendant les tentatives ; aucun nouveau code n'est nécessaire. -->
+        <Grid x:Name="ReconnectOverlay" Grid.RowSpan="2" Panel.ZIndex="60"
+              Visibility="Collapsed" Background="#DC080709">
+            <Border Width="540" MaxWidth="540" Padding="30,26" Margin="18"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="#23191C" BorderBrush="#D6A95F" BorderThickness="2"
+                    CornerRadius="15">
+                <StackPanel>
+                    <TextBlock Text="◈  CONNEXION INTERROMPUE  ◈" FontFamily="Georgia"
+                               FontSize="25" FontWeight="Bold" Foreground="#F5D17B"
+                               TextAlignment="Center" />
+                    <Border Height="1" Background="#8F6940" Margin="20,17" />
+                    <TextBlock Text="Reconnexion automatique à la partie en cours…"
+                               FontSize="17" FontWeight="SemiBold" Foreground="#FFF0D8"
+                               TextAlignment="Center" TextWrapping="Wrap" />
+                    <TextBlock x:Name="ReconnectStatusText" FontSize="13" Foreground="#C9BBA6"
+                               TextAlignment="Center" TextWrapping="Wrap" Margin="8,13,8,21" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="Réessayer maintenant" Style="{StaticResource TableButton}"
+                                Margin="0,0,10,0" Click="RetryConnection_Click" />
+                        <Button Content="Quitter la table" Style="{StaticResource TableDangerButton}"
+                                Margin="0" Click="LeaveDuringReconnect_Click" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- La pause est commune à toute la table ; le décompte vient du serveur de l'hôte. -->
+        <Grid x:Name="PausedGameOverlay" Grid.RowSpan="2" Panel.ZIndex="51"
+              Visibility="Collapsed" Background="#D9080708">
+            <Border Width="590" Padding="32,28" Margin="18" HorizontalAlignment="Center"
+                    VerticalAlignment="Center" Background="#271A1C" BorderBrush="#E0AC62"
+                    BorderThickness="2" CornerRadius="15">
+                <StackPanel>
+                    <TextBlock Text="◈  PARTIE EN PAUSE  ◈" FontFamily="Georgia" FontSize="28"
+                               FontWeight="Bold" Foreground="#F5D17B" TextAlignment="Center" />
+                    <Border Height="1" Background="#9B7144" Margin="18,18" />
+                    <TextBlock x:Name="PausedPlayerText" FontSize="19" FontWeight="SemiBold"
+                               Foreground="#FFF0D8" TextAlignment="Center" TextWrapping="Wrap" />
+                    <TextBlock Text="Les cartes et les jetons restent en place. La partie reprendra dès son retour."
+                               FontSize="15" Foreground="#D7C8B1" TextAlignment="Center"
+                               TextWrapping="Wrap" Margin="15,14,15,8" />
+                    <TextBlock x:Name="PauseDeadlineText" FontSize="15" Foreground="#F1C777"
+                               TextAlignment="Center" Margin="0,4,0,0" />
+                    <Button Content="Paramètres" Style="{StaticResource TableButton}"
+                            HorizontalAlignment="Center" Margin="0,20,0,0" Click="Settings_Click" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Confirmation commune aux sorties du lobby, de la partie et de l'application. -->
+        <Grid x:Name="ExitConfirmationOverlay" Grid.RowSpan="2" Panel.ZIndex="70"
+              Visibility="Collapsed" Background="#E6090709">
+            <Border Width="560" Padding="30,27" Margin="18" HorizontalAlignment="Center"
+                    VerticalAlignment="Center" Background="#281B1D" BorderBrush="#D7A85E"
+                    BorderThickness="2" CornerRadius="16">
+                <StackPanel>
+                    <TextBlock Text="THE GANG  ·  DÉCISION FINALE" Foreground="#D7A85E"
+                               FontSize="13" FontWeight="Bold" TextAlignment="Center" />
+                    <TextBlock x:Name="ExitConfirmationTitle" Text="ABANDONNER LA MISSION ?"
+                               FontFamily="Georgia" FontSize="27" FontWeight="Bold"
+                               Foreground="#F5D17B" TextAlignment="Center" TextWrapping="Wrap"
+                               Margin="0,14,0,0" />
+                    <Border Height="1" Background="#957047" Margin="36,19" />
+                    <TextBlock x:Name="ExitConfirmationQuestion"
+                               Text="Voulez-vous abandonner votre mission ?"
+                               Foreground="#FFF0D8" FontSize="18" FontWeight="SemiBold"
+                               TextAlignment="Center" TextWrapping="Wrap" />
+                    <TextBlock x:Name="ExitConfirmationDetail" Foreground="#D6C4AD"
+                               FontSize="15" TextAlignment="Center" TextWrapping="Wrap"
+                               Margin="10,12,10,24" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="CancelExitButton" Content="Rester à la table" Style="{StaticResource TableButton}"
+                                Width="180" Margin="0,0,12,0" IsCancel="True"
+                                Click="CancelExit_Click" />
+                        <Button x:Name="ConfirmExitButton" Content="Quitter"
+                                Style="{StaticResource TableDangerButton}" Width="190" Margin="0"
+                                Click="ConfirmExit_Click" />
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </Grid>
     </Grid>

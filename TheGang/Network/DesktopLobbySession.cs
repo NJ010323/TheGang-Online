@@ -84,6 +84,24 @@ public sealed class DesktopLobbySession : IAsyncDisposable
         }
     }
 
+    /// <summary>Retrouve le même invité à partir de l'invitation et du jeton sauvés localement.</summary>
+    public static async Task<DesktopLobbySession> ResumeAsync(string invitation, Guid playerId,
+        string sessionToken, CancellationToken cancellationToken = default)
+    {
+        var (code, address, _) = InviteCode.Parse(invitation);
+        var client = new LobbyHttpClient(address);
+        try
+        {
+            await client.ResumeAsync(code, playerId, sessionToken, cancellationToken);
+            return new DesktopLobbySession(client, invitation.Trim());
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
+    }
+
     /// <summary>Ne retente que les requêtes jamais parvenues au serveur faute de DNS.</summary>
     private static bool IsDnsPending(HttpRequestException error)
     {
