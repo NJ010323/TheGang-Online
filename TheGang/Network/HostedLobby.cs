@@ -36,7 +36,6 @@ public sealed class HostedLobby
     private readonly HashSet<Guid> _migrationAcknowledgements = [];
     // Les anciens joueurs entrent d'abord ; un lobby encore ouvert peut ensuite accueillir des amis.
     private HostMigrationSetup? _migrationSetup;
-    private Guid? _returningHostId;
 
     /// <summary>Crée le lobby et l'identité initiale de l'hôte.</summary>
     public HostedLobby(string hostNickname, int maxPlayers, TimeProvider? clock = null)
@@ -72,9 +71,6 @@ public sealed class HostedLobby
             var player = _manager.JoinLobby(Code, nickname);
             var identity = NewIdentity(player.Id);
             _lastSeenGuests[player.Id] = _clock.GetUtcNow();
-            if (string.Equals(player.Name, _migrationSetup?.ReturningHostName,
-                    StringComparison.OrdinalIgnoreCase))
-                _returningHostId = player.Id;
             StartTransferredGameWhenReady();
             return identity;
         }
@@ -194,8 +190,7 @@ public sealed class HostedLobby
                     StringComparison.OrdinalIgnoreCase) ||
                 setup.ExpectedPlayers.Any(string.IsNullOrWhiteSpace) ||
                 setup.ExpectedPlayers.Distinct(StringComparer.OrdinalIgnoreCase).Count() != setup.ExpectedPlayers.Count ||
-                setup.WasStarted && (setup.ExpectedPlayers.Count < 2 ||
-                    setup.HeistNumber != setup.SuccessfulHeists + setup.FailedHeists + 1 ||
+                setup.WasStarted && (setup.HeistNumber != setup.SuccessfulHeists + setup.FailedHeists + 1 ||
                     setup.SuccessfulHeists is < 0 or > 2 || setup.FailedHeists is < 0 or > 2) ||
                 !setup.WasStarted && (setup.HeistNumber != 0 || setup.SuccessfulHeists != 0 ||
                     setup.FailedHeists != 0) ||
@@ -203,6 +198,11 @@ public sealed class HostedLobby
                     setup.ReturningHostName, StringComparer.OrdinalIgnoreCase))
                 throw new ArgumentException("Données de relève invalides.", nameof(setup));
             _migrationSetup = setup with { ExpectedPlayers = setup.ExpectedPlayers.ToArray() };
+            // Une relève à moins de trois prépare un salon ouvert, jamais une partie à deux.
+            // Les nouveaux invités pourront entrer une fois les joueurs transférés arrivés.
+            if (setup.WasStarted && setup.ExpectedPlayers.Count < 3)
+                _migrationSetup = _migrationSetup with
+                { WasStarted = false, HeistNumber = 0, SuccessfulHeists = 0, FailedHeists = 0 };
             return true;
         }
     }
@@ -211,6 +211,7 @@ public sealed class HostedLobby
     private void StartTransferredGameWhenReady()
     {
         if (_migrationSetup is not { WasStarted: true } setup ||
+            setup.ExpectedPlayers.Count < 3 ||
             _lobby.Players.Count != setup.ExpectedPlayers.Count) return;
         _game = _manager.ContinueAfterHostMigration(Code, _lobby.HostId, setup.HeistNumber,
             setup.SuccessfulHeists, setup.FailedHeists);
@@ -267,20 +268,57 @@ public sealed class HostedLobby
                 _manager.CloseLobby(Code, _lobby.HostId);
                 _sessions.Clear();
             }
-            else if (_lobby.Status == LobbyStatus.Started || playerId == _returningHostId)
+            else if (_lobby.Status == LobbyStatus.Started)
             {
                 // Le moteur conserve la main et les jetons du joueur pendant sa courte absence.
                 MarkAbsent(playerId, _clock.GetUtcNow());
+                if (_lobby.Status == LobbyStatus.Started && _lobby.Players.Count - _absentUntil.Count < 3)
+                    ReturnToLobbyAfterDeparture();
             }
             else
             {
                 if (_migration is { Stage: HostMigrationStage.Offered or HostMigrationStage.Preparing } migration)
                     _migration = migration with { Stage = HostMigrationStage.Expired };
+                var name = _lobby.Players.Single(player => player.Id == playerId).Name;
                 _manager.LeaveLobby(Code, playerId);
                 _sessions.Remove(sessionToken);
                 _lastSeenGuests.Remove(playerId);
+                _absentUntil.Remove(playerId);
+                // Un départ du salon est définitif, même après une relève : son nom
+                // ne doit plus bloquer les invitations, la capacité ou le démarrage.
+                if (_migrationSetup is { } setup)
+                {
+                    _migrationSetup = setup with
+                    {
+                        ExpectedPlayers = setup.ExpectedPlayers.Where(expected =>
+                            !string.Equals(expected, name, StringComparison.OrdinalIgnoreCase)).ToArray(),
+                        ReturningHostName = string.Equals(setup.ReturningHostName, name,
+                            StringComparison.OrdinalIgnoreCase) ? null : setup.ReturningHostName
+                    };
+                    if (_migrationSetup.WasStarted && _migrationSetup.ExpectedPlayers.Count < 3)
+                        _migrationSetup = _migrationSetup with
+                        { WasStarted = false, HeistNumber = 0, SuccessfulHeists = 0, FailedHeists = 0 };
+                }
             }
         }
+    }
+
+    /// <summary>Un départ volontaire sous le seuil de trois libère les places absentes et arrête le braquage.</summary>
+    private void ReturnToLobbyAfterDeparture()
+    {
+        var departed = _absentUntil.Keys.ToHashSet();
+        _manager.ReturnToLobby(Code, _lobby.HostId, departed);
+        foreach (var token in _sessions.Where(pair => departed.Contains(pair.Value)).Select(pair => pair.Key).ToArray())
+            _sessions.Remove(token);
+        foreach (var playerId in departed) _lastSeenGuests.Remove(playerId);
+        _absentUntil.Clear();
+        _game = null;
+        _migrationSetup = null;
+        _events.Clear();
+        _nextEventSequence = 0;
+        _activeDrags.Clear();
+        _completedDrags.Clear();
+        _completedDragOrder.Clear();
     }
 
     /// <summary>Permet au seul hôte de lancer la partie quand 3 à 6 joueurs sont présents.</summary>
@@ -509,10 +547,6 @@ public sealed class HostedLobby
                 if (playerId != preparingSuccessor && !_absentUntil.ContainsKey(playerId) &&
                     now - lastSeen >= HeartbeatTimeout)
                     MarkAbsent(playerId, lastSeen + HeartbeatTimeout);
-        else if (_returningHostId is { } returningHost &&
-                 _lastSeenGuests.TryGetValue(returningHost, out var returneeLastSeen) &&
-                 !_absentUntil.ContainsKey(returningHost) && now - returneeLastSeen >= HeartbeatTimeout)
-            MarkAbsent(returningHost, returneeLastSeen + HeartbeatTimeout);
         if (_absentUntil.Values.Any(until => now >= until))
         {
             _manager.CloseLobby(Code, _lobby.HostId);

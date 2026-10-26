@@ -12,6 +12,7 @@ namespace View;
 public partial class App : Application
 {
     private Mutex? _installationLock;
+    private Mutex? _installerPresence;
     private bool _ownsLock;
     private FileStream? _installationReader;
     private FileStream? _checkLock;
@@ -24,6 +25,19 @@ public partial class App : Application
         var state = UpdateFiles.StateDirectory(installation);
         try
         {
+            // Conserver ce signal pendant toute la session : Setup doit attendre,
+            // et ne doit jamais arrêter une partie pour remplacer ses fichiers.
+            _installerPresence = new Mutex(false, InstallerIntegration.RunningMutexName);
+            // Le lancement proposé par la dernière page de Setup précède de quelques
+            // instants sa fermeture : attendre sa libération sans bloquer le dispatcher.
+            if (e.Args.Contains("--after-install"))
+                for (var attempt = 0; attempt < 100 && InstallerIntegration.IsSetupRunning(); attempt++)
+                    await Task.Delay(100);
+            if (InstallerIntegration.IsSetupRunning())
+            {
+                MessageBox.Show("L'installation ou la désinstallation est en cours. Relancez le jeu lorsqu'elle sera terminée.", "The Gang");
+                Shutdown(); return;
+            }
             _installationLock = new Mutex(false, UpdateFiles.LockName(installation));
             try { _ownsLock = _installationLock.WaitOne(0); } catch (AbandonedMutexException) { _ownsLock = true; }
             if (!_ownsLock) { MessageBox.Show("Le jeu ou sa mise à jour est déjà ouvert.", "The Gang"); Shutdown(); return; }
@@ -147,6 +161,7 @@ public partial class App : Application
         _installationReader?.Dispose();
         _checkLock?.Dispose();
         _installationLock?.Dispose();
+        _installerPresence?.Dispose();
         base.OnExit(e);
     }
 }

@@ -1,4 +1,3 @@
-using System.Net.Http;
 using System.Windows;
 using Model.Lobby;
 using Network;
@@ -46,7 +45,9 @@ public partial class MainWindow
                 _migrationSourceLobby = lobby;
                 MigrationOfferText.Text = $"{lobby.Players[0].Name} souhaite quitter la table. " +
                     "Vous êtes le premier invité : acceptez-vous d'héberger la suite de la mission ?";
-                MigrationOfferExplanation.Text = migration.WasStarted
+                MigrationOfferExplanation.Text = migration.WasStarted && migration.ExpectedPlayers.Count < 3
+                    ? "Il restera moins de trois joueurs : retour au lobby pour inviter d'autres joueurs et lancer une nouvelle partie."
+                    : migration.WasStarted
                     ? "Le braquage en cours sera redistribué. Les cartes d'or et les alarmes déjà obtenues seront conservées."
                     : "Les joueurs du lobby rejoindront automatiquement votre nouvelle table. Vous pourrez encore inviter des amis avant de lancer la partie.";
             }
@@ -72,7 +73,7 @@ public partial class MainWindow
     /// <summary>Le successeur ouvre d'abord son tunnel, puis publie sa destination à l'ancien serveur.</summary>
     private async void AcceptMigration_Click(object sender, RoutedEventArgs e)
     {
-        if (_visibleMigrationOffer is not { } migration || _migrationSourceLobby is not { } lobby ||
+        if (_visibleMigrationOffer is not { } migration || _migrationSourceLobby is null ||
             _session is not { } oldSession) return;
         MigrationOfferOverlay.Visibility = Visibility.Collapsed;
         MigrationProgressText.Text = "Ouverture du nouveau serveur et de son tunnel…";
@@ -84,17 +85,13 @@ public partial class MainWindow
             DesktopLobbySession? successor = null;
             try
             {
-                var hostName = lobby.Players[0].Name;
                 var expected = migration.ExpectedPlayers.ToList();
-                // Si le successeur resterait seul, l'ancien hôte conserve une place de reprise
-                // pendant deux minutes sur le nouveau serveur.
-                var returningHost = expected.Count < 2 ? hostName : null;
-                if (returningHost is not null) expected.Add(returningHost);
+                // L'hôte qui quitte ne réserve pas artificiellement une place dans le nouveau lobby.
                 successor = await DesktopLobbySession.CreateAsync(migration.SuccessorName,
                     migration.MaxPlayers);
                 await successor.Client.ConfigureHostMigrationAsync(new HostMigrationSetup(expected,
                     migration.WasStarted, migration.HeistNumber, migration.SuccessfulHeists,
-                    migration.FailedHeists, returningHost));
+                    migration.FailedHeists, null));
                 await oldSession.Client.PublishHostMigrationAsync(
                     new HostMigrationDestination(migration.Id, successor.Invitation));
                 try { await oldSession.Client.AcknowledgeHostMigrationAsync(migration.Id); }
@@ -104,7 +101,9 @@ public partial class MainWindow
                 catch { /* Le nouveau serveur appartient désormais à cette fenêtre. */ }
                 HideMigrationOverlays();
                 EnterLobby();
-                ShowNotice("Vous êtes le nouvel hôte. Les autres joueurs rejoignent la table automatiquement.",
+                ShowNotice(migration.WasStarted && migration.ExpectedPlayers.Count < 3
+                        ? "Vous êtes le nouvel hôte. Moins de trois joueurs : invitez d'autres joueurs depuis le lobby."
+                        : "Vous êtes le nouvel hôte. Les autres joueurs rejoignent la table automatiquement.",
                     NoticeLevel.Success, autoHide: false);
             }
             catch
@@ -165,7 +164,9 @@ public partial class MainWindow
             catch { /* La nouvelle connexion fonctionne déjà. */ }
             HideMigrationOverlays();
             EnterLobby();
-            ShowNotice("Vous avez rejoint le nouvel hôte. Le braquage reprend avec l'équipe présente.",
+            ShowNotice(migration.WasStarted && migration.ExpectedPlayers.Count < 3
+                    ? "Vous avez rejoint le lobby du nouvel hôte. Il faut au moins trois joueurs pour relancer une partie."
+                    : "Vous avez rejoint le nouvel hôte. Le braquage reprend avec l'équipe présente.",
                 NoticeLevel.Success);
         }
         catch (Exception error)
@@ -200,7 +201,6 @@ public partial class MainWindow
             }
             return;
         }
-        var hostName = lobby.Players.First(player => player.Id == lobby.HostId).Name;
         var migration = await oldSession.Client.BeginHostMigrationAsync();
         _activeMigrationId = migration.Id;
         _cancelMigrationRequested = false;
@@ -232,12 +232,6 @@ public partial class MainWindow
             if (migration.Invitation is null)
                 throw new InvalidOperationException("Le nouveau serveur n'a pas publié d'invitation.");
 
-            var returningHost = migration.ExpectedPlayers.Count < 2;
-            if (returningHost)
-            {
-                MigrationProgressText.Text = "Votre place de reprise est réservée sur la nouvelle table…";
-                await ReserveDepartingHostPlaceAsync(migration.Invitation, hostName);
-            }
             migration = await oldSession.Client.AcknowledgeHostMigrationAsync(migration.Id);
 
             var waitingSince = DateTimeOffset.UtcNow;
@@ -264,29 +258,13 @@ public partial class MainWindow
                 Close();
             }
             else
-                await ReturnToMenuAsync(returningHost
-                    ? "L'équipe attend votre retour pendant deux minutes. Utilisez « Reprendre ma partie »."
-                    : "La relève est terminée. La nouvelle équipe peut poursuivre.",
-                    preserveGuestResume: returningHost);
+                await ReturnToMenuAsync("La relève est terminée. Les autres joueurs sont sur la nouvelle table.");
         }
         finally
         {
             _activeMigrationId = null;
             HideMigrationOverlays();
         }
-    }
-
-    /// <summary>Crée un ticket d'invité pour que l'ancien hôte puisse revenir après fermeture.</summary>
-    private static async Task ReserveDepartingHostPlaceAsync(string invitation, string hostName)
-    {
-        await using var returningGuest = await DesktopLobbySession.JoinAsync(invitation, hostName);
-        var identity = returningGuest.Client.Identity
-            ?? throw new InvalidOperationException("Identité de reprise introuvable.");
-        GuestResumeStore.Save(new GuestResumeTicket(invitation, identity.PlayerId,
-            identity.SessionToken, hostName));
-        try { await returningGuest.Client.LeaveAsync(); }
-        catch (HttpRequestException) { /* Le nouveau serveur détectera aussi l'absence par heartbeat. */ }
-        catch (TaskCanceledException) { /* Le ticket permet toujours une reprise de cette identité. */ }
     }
 
     /// <summary>Arrête la proposition avant publication, ou permet une fermeture explicite après délai.</summary>

@@ -109,14 +109,11 @@ public partial class MainWindow
             {
                 if (existing is not null) ChipFlightCanvas.Children.Remove(existing.Element);
                 var visual = new StackPanel { Width = 110, IsHitTestVisible = false };
-                visual.Children.Add(new TextBlock
+                visual.Children.Add(new Border
                 {
-                    Text = $"{drag.PlayerName} déplace",
-                    Foreground = Brushes.White,
-                    FontWeight = FontWeights.Bold,
-                    FontSize = 13,
-                    TextAlignment = TextAlignment.Center,
-                    Background = new SolidColorBrush(Color.FromArgb(220, 29, 19, 18))
+                    Background = new SolidColorBrush(Color.FromArgb(220, 29, 19, 18)),
+                    CornerRadius = new CornerRadius(4), Padding = new Thickness(3),
+                    Child = new GildedPlayerName { Text = drag.PlayerName, FontSize = 13 }
                 });
                 var chip = TableVisuals.Chip(drag.TokenValue, TableVisuals.RoundColor(game.Phase), 58);
                 chip.HorizontalAlignment = HorizontalAlignment.Center;

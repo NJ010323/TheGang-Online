@@ -38,9 +38,11 @@ internal static class TableVisuals
         };
     }
 
-    /// <summary>Positions des adversaires autour de la moitié haute de la table, pour trois à six joueurs.</summary>
+    /// <summary>Positions des adversaires autour de la table, sans erreur pendant un changement d'effectif.</summary>
     public static IReadOnlyList<Point> OpponentPositions(int count) => count switch
     {
+        // Défense contre un ancien instantané à deux : la politique actuelle renvoie ce cas au lobby.
+        1 => [new Point(535, 90)],
         2 => [new Point(320, 95), new Point(750, 95)],
         3 => [new Point(125, 280), new Point(535, 90), new Point(945, 280)],
         4 => [new Point(125, 355), new Point(345, 95), new Point(725, 95), new Point(945, 355)],
@@ -191,14 +193,27 @@ internal static class TableVisuals
             Padding = new Thickness(10, 7, 10, 5)
         };
         var content = new StackPanel();
-        content.Children.Add(new TextBlock
+        var identity = new Grid();
+        identity.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        identity.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        identity.Children.Add(new GildedPlayerName { Text = player.Name, FontSize = 16 });
+        if (isSelf || isHost)
         {
-            Text = player.Name + (isSelf ? "  •  VOUS" : isHost ? "  •  HÔTE" : string.Empty),
-            Foreground = Brushes.White,
-            FontWeight = FontWeights.Bold,
-            FontSize = 16,
-            TextTrimming = TextTrimming.CharacterEllipsis
-        });
+            var badge = new Border
+            {
+                CornerRadius = new CornerRadius(3), Padding = new Thickness(4, 1, 4, 1),
+                Margin = new Thickness(5, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(134, 100, 48)), BorderThickness = new Thickness(0.7),
+                Child = new TextBlock
+                {
+                    Text = isSelf ? "VOUS" : "HÔTE", FontSize = 9, FontWeight = FontWeights.Bold,
+                    Foreground = new SolidColorBrush(Color.FromRgb(228, 195, 130))
+                }
+            };
+            Grid.SetColumn(badge, 1);
+            identity.Children.Add(badge);
+        }
+        content.Children.Add(identity);
         var cardRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
         for (var index = 0; index < 2; index++)
         {

@@ -54,10 +54,12 @@ public partial class MainWindow
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            try { await session.Client.LeaveAsync(timeout.Token); }
+            var notified = false;
+            try { await session.Client.LeaveAsync(timeout.Token); notified = true; }
             catch (Exception) { /* La sortie locale doit rester possible hors connexion. */ }
             if (_session == session) await ReturnToMenuAsync("Vous avez quitté la table.",
-                preserveGuestResume: !session.IsHost);
+                preserveGuestResume: !session.IsHost &&
+                    (!notified || _lastLobbyStatus == LobbyStatus.Started && !DepartureReturnsTeamToLobby));
         }
         finally { _busy = false; }
     }

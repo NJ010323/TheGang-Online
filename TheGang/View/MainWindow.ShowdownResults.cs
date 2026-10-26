@@ -119,11 +119,9 @@ public partial class MainWindow
         };
         Grid.SetColumn(redToken, 1);
         cells.Children.Add(redToken);
-        var player = new TextBlock
+        var player = new GildedPlayerName
         {
-            Text = name, Foreground = Brushes.White,
-            FontSize = 12, FontWeight = FontWeights.SemiBold,
-            TextTrimming = TextTrimming.CharacterEllipsis,
+            Text = name, FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center
         };
         Grid.SetColumn(player, 2);

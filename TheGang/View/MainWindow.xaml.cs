@@ -62,6 +62,7 @@ public partial class MainWindow : Window
         OutcomeAlarmImage.Source = ResultCardVisuals.AlarmFace;
         TableSurface.SizeChanged += (_, _) => PositionHostActions();
         PopulateRulesCard();
+        PopulateMenuCards();
         RefreshResumeButton();
         // Le menu de démarrage occupe tout l'écran ; le mode fenêtré reste accessible dans les paramètres.
         SetFullScreen(true);
@@ -373,7 +374,8 @@ public partial class MainWindow : Window
             ? $"Relève · {lobby.Players.Count}/{expected} réunis · {lobby.MaxPlayers} places · code {lobby.Code}"
             : $"Code local : {lobby.Code}   ·   {lobby.Players.Count}/{lobby.MaxPlayers} joueurs";
         PlayersList.ItemsSource = lobby.Players.Select(player =>
-            player.Id == lobby.HostId ? $"♠  {player.Name}  ·  hôte" : $"♠  {player.Name}").ToArray();
+            new LobbyPlayerDisplay(player.Name, player.Id == lobby.HostId ? "HÔTE" :
+                player.Id == session.Client.Identity?.PlayerId ? "VOUS" : string.Empty)).ToArray();
         var allTransferred = lobby.ExpectedTransferredPlayers is null ||
             lobby.Players.Count >= lobby.ExpectedTransferredPlayers.Value;
         StartButton.IsEnabled = session.IsHost && lobby.Players.Count >= 3 &&
@@ -412,6 +414,8 @@ public partial class MainWindow : Window
             _lastLobbySnapshot = lobby;
             if (await HandleHostMigrationAsync(session, lobby)) return;
             _lastLobbyStatus = lobby.Status;
+            if (lobby.Status == LobbyStatus.Open && GamePanel.Visibility == Visibility.Visible)
+                ReturnToWaitingLobby();
             RenderLobbySummary(session, lobby);
             if (lobby.Status == LobbyStatus.Started)
             {
@@ -447,6 +451,36 @@ public partial class MainWindow : Window
             }
         }
         finally { _refreshing = false; }
+    }
+
+    /// <summary>Suit le retour au salon décidé par le serveur, en annulant tous les visuels de la partie arrêtée.</summary>
+    private void ReturnToWaitingLobby()
+    {
+        StopCardDeal();
+        HideHeistOutcome();
+        HideRoundTransition();
+        CloseRulesCard();
+        DismissExitConfirmation();
+        SettingsOverlay.Visibility = Visibility.Collapsed;
+        TokenActionWheel.Visibility = Visibility.Collapsed;
+        HostActions.Visibility = Visibility.Collapsed;
+        _hostActionAvailable = false;
+        UpdateConfirmCue(false);
+        GamePanel.Visibility = Visibility.Collapsed;
+        LobbyPanel.Visibility = Visibility.Visible;
+        _lastRenderedPhase = null;
+        _lastHeistNumber = _lastCommunityCount = 0;
+        _lastSeenEventSequence = 0;
+        _visibleHands.Clear();
+        _remoteDragVisuals.Clear();
+        ChipFlightCanvas.Children.Clear();
+        SeatsCanvas.Children.Clear();
+        CommunityCardsPanel.Children.Clear();
+        ResetScoreCards();
+        _refreshTimer.Interval = TimeSpan.FromSeconds(2);
+        _connectionWarning = false;
+        ShowNotice("Moins de trois joueurs : retour au lobby. Invitez un joueur pour lancer une nouvelle partie.",
+            NoticeLevel.Info, autoHide: false);
     }
 
     /// <summary>Construit le plateau à partir de la projection réseau du joueur courant.</summary>
@@ -596,13 +630,10 @@ public partial class MainWindow : Window
             var row = new Grid { Margin = new Thickness(0, 0, 0, 6) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(95) });
             foreach (var _ in colors) row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
-            row.Children.Add(new TextBlock
+            row.Children.Add(new GildedPlayerName
             {
-                Text = player.Name,
-                Foreground = Brushes.White,
-                FontWeight = FontWeights.SemiBold,
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis
+                Text = player.Name, FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center
             });
             for (var index = 0; index < colors.Length; index++)
             {
@@ -922,6 +953,8 @@ public partial class MainWindow : Window
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
                 Task.Run(() => session.Client.LeaveAsync(timeout.Token)).GetAwaiter().GetResult();
+                if (!session.IsHost && (_lastLobbyStatus == LobbyStatus.Open || DepartureReturnsTeamToLobby))
+                    GuestResumeStore.Clear();
             }
             catch { /* La fermeture locale reste possible si le serveur est déjà indisponible. */ }
             try { session.DisposeAsync().AsTask().GetAwaiter().GetResult(); }

@@ -18,24 +18,37 @@ internal static class PlayingCardVisuals
     private static readonly Brush Red = Brush("#B52732");
     private static readonly Brush Black = Brush("#17212A");
     private static readonly Brush Gold = Brush("#D2A14B");
+    private static readonly Brush MetallicGold = new LinearGradientBrush
+    {
+        StartPoint = new Point(0, 0), EndPoint = new Point(1, 1),
+        GradientStops =
+        [
+            new GradientStop((Color)ColorConverter.ConvertFromString("#85501B"), 0),
+            new GradientStop((Color)ColorConverter.ConvertFromString("#FFE5A4"), 0.28),
+            new GradientStop((Color)ColorConverter.ConvertFromString("#B57C29"), 0.55),
+            new GradientStop((Color)ColorConverter.ConvertFromString("#F7D782"), 0.76),
+            new GradientStop((Color)ColorConverter.ConvertFromString("#93601F"), 1)
+        ]
+    };
     private static readonly Brush Skin = Brush("#F1CAA0");
 
     /// <summary>Construit une carte complète ; seules les données de la carte déterminent la face.</summary>
-    public static FrameworkElement Face(CardSnapshot card, double width, double height)
+    public static FrameworkElement Face(CardSnapshot card, double width, double height,
+        bool ornateIndices = false, bool ornateSymbols = false)
     {
         var (symbol, ink) = Suit(card.Suit);
         var rank = card.Rank switch { 1 => "A", 11 => "V", 12 => "D", 13 => "R", _ => card.Rank.ToString() };
         var art = new Canvas { Width = ArtWidth, Height = ArtHeight, Background = Paper };
 
         if (card.Rank == 1)
-            AddAce(art, symbol, ink);
+            AddAce(art, symbol, ink, ornateSymbols);
         else if (card.Rank >= 11)
-            AddCourt(art, card.Rank, symbol, ink);
+            AddCourt(art, card.Rank, symbol, ink, ornateSymbols);
         else
-            AddNumberPips(art, card.Rank, symbol, ink);
+            AddNumberPips(art, card.Rank, symbol, ink, ornateSymbols);
 
-        AddCorner(art, rank, symbol, ink, turned: false);
-        AddCorner(art, rank, symbol, ink, turned: true);
+        AddCorner(art, rank, symbol, ink, turned: false, ornateIndices);
+        AddCorner(art, rank, symbol, ink, turned: true, ornateIndices);
 
         return new Border
         {
@@ -56,27 +69,94 @@ internal static class PlayingCardVisuals
     }
 
     /// <summary>Place les indices dans les coins opposés comme sur un paquet français.</summary>
-    private static void AddCorner(Canvas art, string rank, string symbol, Brush ink, bool turned)
+    private static void AddCorner(Canvas art, string rank, string symbol, Brush ink, bool turned, bool ornateIndices)
     {
         var corner = new Canvas { Width = ArtWidth, Height = ArtHeight, IsHitTestVisible = false };
         if (turned) corner.RenderTransform = new RotateTransform(180, ArtWidth / 2, ArtHeight / 2);
-        Place(corner, Label(rank, ink, rank == "10" ? 19 : 24, FontWeights.Bold, 23), 3, 0);
-        Place(corner, Label(symbol, ink, 19, FontWeights.Normal, 20), 4, 24);
+        if (ornateIndices)
+        {
+            // Les empattements et le contour gravé sont réservés aux grandes cartes décoratives.
+            // Les indices de la table conservent leur taille et leur contraste habituels.
+            Place(corner, EngravedIndex(rank, "Georgia", rank == "10" ? 21 : 27, 25, 25, ink), 2, 2);
+            Place(corner, EngravedIndex(symbol, "Segoe UI Symbol", 18, 18, 18, ink), 5.5, 32);
+            Place(corner, new Path
+            {
+                Data = Geometry.Parse("M 4,28 Q 14.5,32 25,28 M 4,28 L 6,26 M 25,28 L 23,26"),
+                Stroke = Gold, StrokeThickness = 0.65, StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            }, 0, 0);
+        }
+        else
+        {
+            Place(corner, Label(rank, ink, rank == "10" ? 19 : 24, FontWeights.Bold, 23), 3, 0);
+            Place(corner, Label(symbol, ink, 19, FontWeights.Normal, 20), 4, 24);
+        }
         art.Children.Add(corner);
     }
 
+    /// <summary>Dessine un indice en vecteurs : encre nuancée, filet d'or et léger relief restent nets au zoom.</summary>
+    private static FrameworkElement EngravedIndex(string text, string family, double size,
+        double width, double height, Brush ink, double goldWidth = 0.55)
+    {
+        var lettering = new FormattedText(text, System.Globalization.CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight, new Typeface(new FontFamily(family), FontStyles.Normal,
+                FontWeights.Bold, FontStretches.Normal), size, ink, 1);
+        var geometry = lettering.BuildGeometry(new Point());
+        var bounds = geometry.Bounds;
+        // Centrer sur les contours réels évite que le « 10 » déborde et aligne chiffres et figures.
+        var scale = Math.Min(1, Math.Min((width - 2) / bounds.Width, (height - 2) / bounds.Height));
+        geometry.Transform = new TransformGroup
+        {
+            Children =
+            [
+                new TranslateTransform(-bounds.X, -bounds.Y),
+                new ScaleTransform(scale, scale),
+                new TranslateTransform((width - bounds.Width * scale) / 2, (height - bounds.Height * scale) / 2)
+            ]
+        };
+        var red = ReferenceEquals(ink, Red);
+        var pigment = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0), EndPoint = new Point(1, 1),
+            GradientStops =
+            [
+                new GradientStop((Color)ColorConverter.ConvertFromString(red ? "#661829" : "#101B28"), 0),
+                new GradientStop((Color)ColorConverter.ConvertFromString(red ? "#CD4B52" : "#546676"), 0.4),
+                new GradientStop((Color)ColorConverter.ConvertFromString(red ? "#8B2035" : "#17212E"), 1)
+            ]
+        };
+        var canvas = new Canvas { Width = width, Height = height, IsHitTestVisible = false };
+        canvas.Children.Add(new Path
+        {
+            Data = geometry, Fill = pigment, Stroke = goldWidth > 0.55 ? MetallicGold : Gold, StrokeThickness = goldWidth,
+            StrokeLineJoin = PenLineJoin.Round,
+            Effect = new DropShadowEffect
+            {
+                Color = Color.FromRgb(104, 67, 20), BlurRadius = goldWidth > 0.55 ? 1.1 : 0.7,
+                ShadowDepth = goldWidth > 0.55 ? 0.65 : 0.45, Opacity = 0.3
+            }
+        });
+        return canvas;
+    }
+
     /// <summary>Répartit exactement autant d'enseignes que la valeur, en colonnes symétriques.</summary>
-    private static void AddNumberPips(Canvas art, int rank, string symbol, Brush ink)
+    private static void AddNumberPips(Canvas art, int rank, string symbol, Brush ink, bool ornateSymbols)
     {
         foreach (var (x, y) in PipPositions(rank))
         {
-            var pip = Label(symbol, ink, rank >= 7 ? 25 : 29, FontWeights.Normal, 30);
-            pip.TextAlignment = TextAlignment.Center;
+            // Même nombre et mêmes positions : seule la finition des enseignes décoratives change.
+            FrameworkElement pip = ornateSymbols
+                ? GildedSymbol(symbol, ink, rank >= 7 ? 25 : 29, 30, 30)
+                : Label(symbol, ink, rank >= 7 ? 25 : 29, FontWeights.Normal, 30);
             if (y > ArtHeight / 2)
                 pip.RenderTransform = new RotateTransform(180, 15, 15);
             Place(art, pip, x - 15, y - 15);
         }
     }
+
+    /// <summary>Conserve l'encre rouge ou noire, entourée d'une dorure métallique et d'un relief discret.</summary>
+    private static FrameworkElement GildedSymbol(string symbol, Brush ink, double size, double width, double height) =>
+        EngravedIndex(symbol, "Segoe UI Symbol", size, width, height, ink, goldWidth: size >= 50 ? 1.25 : 0.95);
 
     private static IReadOnlyList<(double X, double Y)> PipPositions(int rank) => rank switch
     {
@@ -95,20 +175,21 @@ internal static class PlayingCardVisuals
     };
 
     /// <summary>L'as garde une grande enseigne et un encadrement discret au centre.</summary>
-    private static void AddAce(Canvas art, string symbol, Brush ink)
+    private static void AddAce(Canvas art, string symbol, Brush ink, bool ornateSymbols)
     {
         Place(art, new Ellipse
         {
             Width = 68, Height = 78, Stroke = Gold, StrokeThickness = 1.5,
             Fill = Brushes.Transparent
         }, 16, 33);
-        Place(art, Label(symbol, ink, 72, FontWeights.Normal, 82), 9, 33);
+        Place(art, ornateSymbols ? GildedSymbol(symbol, ink, 72, 82, 82)
+            : Label(symbol, ink, 72, FontWeights.Normal, 82), 9, 33);
         Place(art, new Rectangle { Width = 22, Height = 1.5, Fill = Gold }, 39, 28);
         Place(art, new Rectangle { Width = 22, Height = 1.5, Fill = Gold }, 39, 114);
     }
 
     /// <summary>Les figures ont un cadre, une silhouette et deux portraits inversés.</summary>
-    private static void AddCourt(Canvas art, int rank, string symbol, Brush ink)
+    private static void AddCourt(Canvas art, int rank, string symbol, Brush ink, bool ornateSymbols)
     {
         var uniform = rank switch
         {
@@ -127,13 +208,13 @@ internal static class PlayingCardVisuals
             Stroke = ink, StrokeThickness = 0.8
         }, 23.5, 28);
 
-        AddCourtHalf(art, rank, symbol, ink, uniform, turned: false);
-        AddCourtHalf(art, rank, symbol, ink, uniform, turned: true);
+        AddCourtHalf(art, rank, symbol, ink, uniform, turned: false, ornateSymbols);
+        AddCourtHalf(art, rank, symbol, ink, uniform, turned: true, ornateSymbols);
         Place(art, new Rectangle { Width = 53, Height = 2, Fill = Gold }, 23.5, 71);
     }
 
     private static void AddCourtHalf(Canvas art, int rank, string symbol, Brush ink,
-        Brush uniform, bool turned)
+        Brush uniform, bool turned, bool ornateSymbols)
     {
         var half = new Canvas { Width = ArtWidth, Height = ArtHeight, IsHitTestVisible = false };
         if (turned) half.RenderTransform = new RotateTransform(180, ArtWidth / 2, ArtHeight / 2);
@@ -177,7 +258,8 @@ internal static class PlayingCardVisuals
             }
         }
 
-        Place(half, Label(symbol, ink, 15, FontWeights.Bold, 16), 42, 56);
+        Place(half, ornateSymbols ? GildedSymbol(symbol, ink, 15, 16, 17)
+            : Label(symbol, ink, 15, FontWeights.Bold, 16), 42, 56);
         art.Children.Add(half);
     }
 

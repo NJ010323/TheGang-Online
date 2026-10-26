@@ -1,6 +1,7 @@
 <Window x:Class="View.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:View"
         Title="The Gang" Icon="Assets/app-icon.png" Width="1440" Height="900" MinWidth="960" MinHeight="680"
         WindowStartupLocation="CenterScreen" Background="#0D0909" Foreground="#F8EDD9"
         KeyDown="Window_KeyDown" MouseMove="Window_MouseMove"
@@ -372,8 +373,8 @@
             </Rectangle>
             <Grid Margin="80,26">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2*" />
-                    <ColumnDefinition Width="3*" />
+                    <ColumnDefinition Width="530" />
+                    <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Width="530" HorizontalAlignment="Left" VerticalAlignment="Center">
                     <TextBlock Text="UN BRAQUAGE. UNE SEULE ÉQUIPE." Foreground="#F0C86A"
@@ -397,16 +398,12 @@
                     <Button Content="Quitter le jeu" Width="270" HorizontalAlignment="Left"
                             Style="{StaticResource QuietButton}" Margin="0,0,0,7" Click="Quit_Click" />
                 </StackPanel>
-                <Grid Grid.Column="1" Width="500" Height="480" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Image Source="Assets/card-back.png" Width="205" Height="310" HorizontalAlignment="Center"
-                           VerticalAlignment="Center" Margin="-115,5,0,0">
-                        <Image.RenderTransform><RotateTransform Angle="-15" CenterX="100" CenterY="150" /></Image.RenderTransform>
-                    </Image>
-                    <Image Source="Assets/card-back.png" Width="205" Height="310" HorizontalAlignment="Center"
-                           VerticalAlignment="Center" Margin="115,-5,0,0">
-                        <Image.RenderTransform><RotateTransform Angle="13" CenterX="100" CenterY="150" /></Image.RenderTransform>
-                    </Image>
-                </Grid>
+                <!-- Éventail décoratif : cinq faces aléatoires et deux dos, réduits ensemble sur les petits écrans. -->
+                <Viewbox Grid.Column="1" MaxWidth="600" MaxHeight="540" Margin="20,0,0,0"
+                         Stretch="Uniform" StretchDirection="DownOnly" IsHitTestVisible="False"
+                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Canvas x:Name="MenuCardsCanvas" Width="600" Height="540" />
+                </Viewbox>
             </Grid>
         </Grid>
 
@@ -514,7 +511,48 @@
                         <TextBlock Text="AUTOUR DE LA TABLE" Foreground="#F0C86A" FontSize="17"
                                    FontWeight="Bold" Margin="0,0,0,16" />
                         <ListBox x:Name="PlayersList" Height="300" Background="Transparent" Foreground="#F8EDD9"
-                                 BorderThickness="0" FontSize="19" />
+                                 BorderThickness="0" FontSize="19" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Template">
+                                        <Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter /></ControlTemplate></Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#76251B16" BorderBrush="#776E512C" BorderThickness="1"
+                                            CornerRadius="7" Padding="11,7" Margin="0,0,0,7">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="30" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="♠" Foreground="#C99F51" FontFamily="Segoe UI Symbol"
+                                                       FontSize="18" VerticalAlignment="Center" />
+                                            <local:GildedPlayerName Grid.Column="1" Text="{Binding Name}" FontSize="20"
+                                                                   VerticalAlignment="Center" />
+                                            <Border Grid.Column="2" CornerRadius="3" Padding="6,3" Margin="8,0,0,0"
+                                                    BorderBrush="#997B5C2D" BorderThickness="0.7" Background="#5320140D"
+                                                    VerticalAlignment="Center">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Role}" Value=""><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding Role}" FontSize="10" FontWeight="Bold" Foreground="#E4C382" />
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
                     </StackPanel>
                 </Border>
             </Grid>

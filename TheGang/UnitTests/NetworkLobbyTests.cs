@@ -67,15 +67,16 @@ public class NetworkLobbyTests
     }
 
     [Fact]
-    public async Task GuestLeavingPausesTheGameAndCanResumeTheSameHand()
+    public async Task GuestLeavingWithThreeOthersPresentCanResumeTheSameHand()
     {
-        await using var server = await LobbyHttpServer.StartAsync("Host", 3);
+        await using var server = await LobbyHttpServer.StartAsync("Host", 4);
         using var host = new LobbyHttpClient(server.LocalAddress);
         using var bob = new LobbyHttpClient(server.LocalAddress);
         using var chloe = new LobbyHttpClient(server.LocalAddress);
         host.SetHostIdentity(server.Lobby.HostIdentity);
         await bob.JoinAsync("Bob", server.Lobby.InvitationSecret);
         await chloe.JoinAsync("Chloe", server.Lobby.InvitationSecret);
+        server.Lobby.Join("Dora", server.Lobby.InvitationSecret);
         await host.StartAsync();
         var identity = bob.Identity!;
         var originalHand = (await bob.GetGameAsync()).Players.Single(player => player.Id == identity.PlayerId).Hand;
@@ -220,7 +221,7 @@ public class NetworkLobbyTests
     }
 
     [Fact]
-    public void MigrationCanReserveDepartingHostWhenOnlyOneGuestRemains()
+    public void FormerHostLeavingAnOpenTransferredLobbyIsNotExpectedToReturn()
     {
         var clock = new AdjustableClock(new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero));
         var old = new HostedLobby("Alice", 3, clock);
@@ -236,27 +237,41 @@ public class NetworkLobbyTests
         next.Leave(next.Code, returningHost.SessionToken);
         var paused = next.GetLobby(next.Code, next.HostIdentity.SessionToken);
         Assert.Equal(LobbyStatus.Open, paused.Status);
-        Assert.Equal("Alice", Assert.Single(paused.AbsentPlayers).Name);
-
-        next.Resume(next.Code, returningHost.SessionToken);
-        Assert.Empty(next.GetLobby(next.Code, next.HostIdentity.SessionToken).AbsentPlayers);
-        next.Leave(next.Code, returningHost.SessionToken);
+        Assert.Equal("Bob", Assert.Single(paused.Players).Name);
+        Assert.Empty(paused.AbsentPlayers);
+        Assert.Null(paused.ExpectedTransferredPlayers);
+        Assert.False(paused.AutoResumeTransferredGame);
+        Assert.Throws<UnauthorizedAccessException>(() => next.Resume(next.Code, returningHost.SessionToken));
         clock.Advance(TimeSpan.FromMinutes(2));
-        Assert.Throws<KeyNotFoundException>(() => next.GetLobby(next.Code, next.HostIdentity.SessionToken));
+        Assert.Equal(LobbyStatus.Open, next.GetLobby(next.Code, next.HostIdentity.SessionToken).Status);
+        next.Join("Chloe", next.InvitationSecret);
+        next.Join("Dora", next.InvitationSecret);
+        Assert.Equal(3, next.Start(next.Code, next.HostIdentity.SessionToken).Players.Count);
     }
 
     [Fact]
-    public void TransferredGameKeepsCompletedResultsAndAllowsTwoPlayers()
+    public void TransferredPairWaitsInLobbyAndCanInviteAThirdPlayer()
     {
         var next = new HostedLobby("Bob", 3);
         next.ConfigureHostMigration(next.Code, next.HostIdentity.SessionToken,
             new HostMigrationSetup(["Bob", "Chloe"], true, 2, 1, 0, null));
         var chloe = next.Join("Chloe", next.InvitationSecret);
-        var game = next.GetGame(next.Code, chloe.SessionToken);
-        Assert.Equal(2, game.HeistNumber);
-        Assert.Equal(1, game.SuccessfulHeists);
+        foreach (var viewer in new[] { next.HostIdentity, chloe })
+        {
+            var lobby = next.GetLobby(next.Code, viewer.SessionToken);
+            Assert.Equal(LobbyStatus.Open, lobby.Status);
+            Assert.Equal(2, lobby.Players.Count);
+            Assert.False(lobby.AutoResumeTransferredGame);
+            Assert.Throws<InvalidOperationException>(() => next.GetGame(next.Code, viewer.SessionToken));
+        }
+        Assert.Throws<InvalidOperationException>(() => next.Start(next.Code, next.HostIdentity.SessionToken));
+        next.Join("Dora", next.InvitationSecret);
+        Assert.Equal(LobbyStatus.Open, next.GetLobby(next.Code, chloe.SessionToken).Status);
+        var game = next.Start(next.Code, next.HostIdentity.SessionToken);
+        Assert.Equal(1, game.HeistNumber);
+        Assert.Equal(0, game.SuccessfulHeists);
         Assert.Equal(0, game.FailedHeists);
-        Assert.Equal(2, game.AvailableTokens.Count);
+        Assert.Equal(3, game.AvailableTokens.Count);
         Assert.Equal(GamePhase.PreFlop, game.Phase);
     }
 
@@ -372,9 +387,10 @@ public class NetworkLobbyTests
     public void GuestDisconnectBeforePublicationCancelsMigrationWithoutLosingTheirResumePlace(
         bool accepted)
     {
-        var old = new HostedLobby("Alice", 3);
+        var old = new HostedLobby("Alice", 4);
         var bob = old.Join("Bob", old.InvitationSecret);
         old.Join("Chloe", old.InvitationSecret);
+        old.Join("Dora", old.InvitationSecret);
         old.Start(old.Code, old.HostIdentity.SessionToken);
         var offer = old.BeginHostMigration(old.Code, old.HostIdentity.SessionToken);
         if (accepted)
@@ -393,11 +409,13 @@ public class NetworkLobbyTests
     public void TransferredLobbyRejectsUnknownPlayersAndPausesForReturningFormerHost()
     {
         var clock = new AdjustableClock(new DateTimeOffset(2026, 10, 23, 12, 0, 0, TimeSpan.Zero));
-        var next = new HostedLobby("Bob", 3, clock);
+        var next = new HostedLobby("Bob", 4, clock);
         next.ConfigureHostMigration(next.Code, next.HostIdentity.SessionToken,
-            new HostMigrationSetup(["Bob", "Alice"], true, 1, 0, 0, "Alice"));
+            new HostMigrationSetup(["Bob", "Alice", "Chloe", "Dora"], true, 1, 0, 0, "Alice"));
         Assert.Throws<UnauthorizedAccessException>(() => next.Join("Mallory", next.InvitationSecret));
         var alice = next.Join("Alice", next.InvitationSecret);
+        next.Join("Chloe", next.InvitationSecret);
+        next.Join("Dora", next.InvitationSecret);
         var oldHand = next.GetGame(next.Code, alice.SessionToken).Players
             .Single(player => player.Id == alice.PlayerId).Hand;
         next.Leave(next.Code, alice.SessionToken);

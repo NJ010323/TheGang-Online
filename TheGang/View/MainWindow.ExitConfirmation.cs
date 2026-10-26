@@ -13,6 +13,10 @@ public partial class MainWindow
     // Aucune session au démarrage : Alt+F4 peut annuler la vérification réseau.
     internal bool StartupUpdateInProgress { get; set; }
 
+    // Le ticket de reprise n'est plus valable si ce départ provoque l'arrêt de la partie.
+    private bool DepartureReturnsTeamToLobby => _lastLobbyStatus == Model.Lobby.LobbyStatus.Started &&
+        _lastLobbySnapshot is { } lobby && lobby.Players.Count - lobby.AbsentPlayers.Count - 1 < 3;
+
     /// <summary>Intercepte aussi la croix de la fenêtre et Alt+F4.</summary>
     protected override void OnClosing(CancelEventArgs e)
     {
@@ -39,9 +43,13 @@ public partial class MainWindow
             : gameStarted
                 ? isHost
                     ? canOfferRelief
-                        ? "Le premier invité pourra reprendre l'hébergement. Le braquage en cours sera redistribué et les résultats acquis seront conservés."
+                        ? _lastLobbySnapshot!.Players.Count - 1 < 3
+                            ? "Le premier invité pourra reprendre l'hébergement. Moins de trois joueurs resteront : retour au lobby pour inviter d'autres joueurs."
+                            : "Le premier invité pourra reprendre l'hébergement. Le braquage en cours sera redistribué et les résultats acquis seront conservés."
                         : "Vous êtes l'hôte : la partie se terminera pour toute l'équipe."
-                    : "Votre place et vos cartes resteront réservées pendant deux minutes. L'équipe attendra votre retour."
+                    : _lastLobbySnapshot is { } current && current.Players.Count - current.AbsentPlayers.Count - 1 < 3
+                        ? "Moins de trois joueurs resteront : la partie sera arrêtée et les autres joueurs retourneront au lobby."
+                        : "Votre place et vos cartes resteront réservées pendant deux minutes. L'équipe attendra votre retour."
                 : isHost
                     ? canOfferRelief
                         ? "Le premier invité pourra reprendre le lobby après votre départ."
@@ -137,11 +145,13 @@ public partial class MainWindow
         {
             if (_session is not { } session) return;
             var isHost = session.IsHost;
+            var returnToLobby = DepartureReturnsTeamToLobby;
             await session.Client.LeaveAsync();
             if (_session == session)
                 await ReturnToMenuAsync(isHost ? "La partie a été fermée pour tous les joueurs." :
-                    "Votre place est réservée pendant deux minutes. Utilisez « Reprendre ma partie » pour revenir.",
-                    preserveGuestResume: !isHost);
+                    returnToLobby ? "Vous avez quitté la partie. Les autres joueurs sont retournés au lobby." :
+                        "Votre place est réservée pendant deux minutes. Utilisez « Reprendre ma partie » pour revenir.",
+                    preserveGuestResume: !isHost && !returnToLobby);
         });
     }
 }

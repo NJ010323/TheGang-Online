@@ -98,6 +98,21 @@ public sealed class Lobby
         }
     }
 
+    /// <summary>Rouvre le salon après une interruption ; les identités des joueurs restants sont conservées.</summary>
+    internal void ReturnToLobby(Guid requesterId, IReadOnlyCollection<Guid> departedPlayers)
+    {
+        lock (_sync)
+        {
+            EnsureHost(requesterId);
+            if (_status != LobbyStatus.Started || departedPlayers.Contains(HostId) ||
+                departedPlayers.Any(id => !_game.Players.Any(player => player.Id == id)))
+                throw new InvalidOperationException("Impossible de rouvrir ce lobby.");
+            _game.ReturnToLobby();
+            foreach (var playerId in departedPlayers) _game.RemovePlayer(playerId);
+            _status = LobbyStatus.Open;
+        }
+    }
+
     /// <summary>Change le nombre de places avant le départ, sans exclure un joueur présent.</summary>
     internal void ChangeCapacity(Guid requesterId, int maxPlayers)
     {

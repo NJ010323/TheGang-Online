@@ -3,6 +3,9 @@ using Updates;
 
 // Arguments produits uniquement par le service interne du jeu.
 if (args.Length != 5) return;
+// Le même signal protège aussi la période où le jeu est fermé pour sa mise à jour.
+using var installerPresence = new Mutex(false, InstallerIntegration.RunningMutexName);
+if (InstallerIntegration.IsSetupRunning()) return;
 var installation = Path.GetFullPath(args[0]);
 var state = UpdateFiles.StateDirectory(installation);
 var staged = Path.GetFullPath(args[1]);

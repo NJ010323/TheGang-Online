@@ -63,6 +63,10 @@ public sealed class LobbyManager
     public Model.Game.Game StartGame(string code, Guid requesterId) =>
         GetLobby(code).Start(requesterId);
 
+    /// <summary>Interrompt la partie et rouvre les invitations sans changer de serveur ni de code.</summary>
+    public void ReturnToLobby(string code, Guid requesterId, IReadOnlyCollection<Guid> departedPlayers) =>
+        GetLobby(code).ReturnToLobby(requesterId, departedPlayers);
+
     /// <summary>Rétablit les résultats acquis puis redistribue le braquage interrompu.</summary>
     public Model.Game.Game ContinueAfterHostMigration(string code, Guid requesterId,
         int heistNumber, int successfulHeists, int failedHeists) =>
