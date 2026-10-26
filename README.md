@@ -88,3 +88,7 @@ Pour tester en plus le tunnel public réel (nécessite l'accès à Cloudflare) :
 $env:THEGANG_CLOUDFLARED = (Resolve-Path 'TheGang/artifacts/win-x64/cloudflared.exe').Path
 dotnet test TheGang/UnitTests/UnitTests.csproj --filter FullyQualifiedName~QuickTunnelAllowsJoiningFromItsPublicAddress
 ```
+
+## Mises à jour automatiques
+
+Les distributions Windows intègrent désormais la vérification GitHub Releases au démarrage, un téléchargement vérifié et une installation avec restauration. Les joueurs continuent d'ouvrir `TheGang.exe`. Voir [le guide de compilation, publication et récupération](docs/mises-a-jour.md). Le dossier de sortie de `publish-windows.ps1` doit être vide ; utilisez `-Version 1.0.0 -OutputDirectory ./TheGang/artifacts/release-1.0.0` pour préparer la première distribution.

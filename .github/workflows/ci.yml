@@ -1,59 +1,66 @@
-name: Publish
-
-permissions:
-  contents: write
-
+name: Windows Release
 on:
-  release:
-    types: [published]
-
-env:
-  DOTNET_VERSION: '8.0.x'
-
-defaults:
-  run:
-    working-directory: TheGang
-
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
-  release:
-    name: Release (Windows)
+  build:
     runs-on: windows-latest
-
+    outputs:
+      distribution_repository: ${{ steps.distribution.outputs.repository }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Build and Package
+          dotnet-version: '8.0.x'
+      - name: Validate stable tag
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_NAME -notmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Expected vX.Y.Z' }
+          "GAME_VERSION=$($env:GITHUB_REF_NAME.Substring(1))" >> $env:GITHUB_ENV
+      - name: Tests
+        run: dotnet test TheGang/UnitTests/UnitTests.csproj -c Release
+      - name: Publish complete Windows x64 package
+        id: distribution
+        shell: pwsh
+        env:
+          DISTRIBUTION_REPOSITORY: ${{ vars.DISTRIBUTION_REPOSITORY }}
+        run: |
+          $repo = $env:DISTRIBUTION_REPOSITORY
+          if (!$repo) { $repo = (Get-Content TheGang/update-settings.json -Raw | ConvertFrom-Json).Repository }
+          "repository=$repo" >> $env:GITHUB_OUTPUT
+          ./TheGang/publish-windows.ps1 -Version $env:GAME_VERSION -DistributionRepository $repo
+          Compress-Archive -Path TheGang/artifacts/win-x64/* -DestinationPath TheGang-win-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: TheGang-win-x64.zip
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+      - name: Publish compiled assets only
+        env:
+          GH_TOKEN: ${{ secrets.DISTRIBUTION_TOKEN || github.token }}
+          TARGET_REPO: ${{ needs.build.outputs.distribution_repository }}
+          SOURCE_REPO: ${{ github.repository }}
+          SOURCE_PRIVATE: ${{ github.event.repository.private }}
         shell: bash
         run: |
-          tag=$(git describe --tags --abbrev=0)
-          version=${tag#v}
-          release_name="thegang-$tag-win-x64"
-
-          # Build
-          dotnet publish View/View.csproj -c Release -r win-x64 -f net8.0 \
-            -p:PublishSingleFile=true -p:SelfContained=false \
-            -p:DebugType=None -p:DebugSymbols=false \
-            -p:Version=$version -p:FileVersion=$version -p:InformationalVersion=$tag \
-            -o "$release_name"
-
-          # Pack to zip
-          7z a -tzip "${release_name}.zip" "./${release_name}/*"
-
-          # Move zip output
-          mv "${release_name}.zip" ..
-
-          # Delete output directory
-          rm -r "$release_name"
-
-      - name: Publish
-        uses: softprops/action-gh-release@v2
-        with:
-          files: "thegang*.zip"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          set -euo pipefail
+          if [[ "$SOURCE_PRIVATE" == "true" && "$TARGET_REPO" == "$SOURCE_REPO" ]]; then
+            echo 'Configure a separate public DISTRIBUTION_REPOSITORY and DISTRIBUTION_TOKEN.' >&2
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" --repo "$TARGET_REPO" --title "The Gang $GITHUB_REF_NAME" --notes "Version stable Windows x64. Extraire tout le ZIP puis ouvrir TheGang.exe." --draft
+          gh release upload "$GITHUB_REF_NAME" TheGang-win-x64.zip --repo "$TARGET_REPO"
+          gh release edit "$GITHUB_REF_NAME" --repo "$TARGET_REPO" --draft=false --latest

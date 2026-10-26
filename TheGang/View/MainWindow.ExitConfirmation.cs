@@ -10,11 +10,13 @@ public partial class MainWindow
 
     private ExitIntent? _pendingExit;
     private bool _applicationExitConfirmed;
+    // Aucune session au démarrage : Alt+F4 peut annuler la vérification réseau.
+    internal bool StartupUpdateInProgress { get; set; }
 
     /// <summary>Intercepte aussi la croix de la fenêtre et Alt+F4.</summary>
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (!_applicationExitConfirmed)
+        if (!_applicationExitConfirmed && !StartupUpdateInProgress)
         {
             e.Cancel = true;
             ShowExitConfirmation(ExitIntent.Application);
