@@ -17,6 +17,8 @@ public partial class MainWindow
         HideRoundTransition();
         CloseRulesCard();
         var vaultOpened = game.Result == GameResult.Won;
+        OutcomeReturnToTableButton.Visibility = game.Phase == GamePhase.Finished
+            ? Visibility.Collapsed : Visibility.Visible;
 
         OutcomeEyebrow.Text = $"BRAQUAGE {action.HeistNumber}";
         OutcomeTitle.Text = vaultOpened ? "COFFRE OUVERT !" : succeeded
@@ -67,6 +69,7 @@ public partial class MainWindow
             OutcomeAlarmGlow.Opacity = 0.7;
         }
 
+        RenderRematch(game);
         // Le débrief reste lisible jusqu'au choix explicite du joueur.
     }
 

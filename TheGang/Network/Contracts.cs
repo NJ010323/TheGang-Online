@@ -24,6 +24,7 @@ public sealed record LobbySnapshot(string Code, Guid HostId, int MaxPlayers, Lob
     public int? ExpectedTransferredPlayers { get; init; }
     /// <summary>La partie transférée redémarre dès que tous ces joueurs sont présents.</summary>
     public bool AutoResumeTransferredGame { get; init; }
+    public string? GameReturnReason { get; init; }
 }
 /// <summary>Identité publique d'un invité attendu avant la fermeture de la partie.</summary>
 public sealed record AbsentPlayerSnapshot(Guid PlayerId, string Name, DateTimeOffset ReconnectUntilUtc);
@@ -70,6 +71,10 @@ public sealed record GameDragSnapshot(Guid PlayerId, string PlayerName, Guid Ges
 /// <summary>Mise à jour éphémère du glissement ; seul le dépôt change le propriétaire du jeton.</summary>
 public sealed record GameDragRequest(Guid GestureId, int TokenValue, long Revision,
     double X, double Y, bool IsActive);
+/// <summary>Vote limité à une fin de partie ; l'heure serveur évite les décalages d'horloge des clients.</summary>
+public sealed record RematchSnapshot(Guid Id, DateTimeOffset ExpiresAtUtc, DateTimeOffset ServerNowUtc,
+    IReadOnlyList<Guid> AcceptedPlayers);
+public sealed record RematchDecision(Guid Id, bool Accepted);
 /// <summary>Vue autorisée de la partie pour une seule connexion.</summary>
 public sealed record GameSnapshot(GamePhase Phase, GameResult Result, int HeistNumber,
     int SuccessfulHeists, int FailedHeists, bool? LastHeistSucceeded,
@@ -80,6 +85,8 @@ public sealed record GameSnapshot(GamePhase Phase, GameResult Result, int HeistN
 {
     /// <summary>Mains dévoilées uniquement ; vide si un ancien hôte ne fournit pas encore ce champ.</summary>
     public IReadOnlyList<RevealedHandSnapshot> RevealedHands { get; init; } = [];
+    public Guid GameId { get; init; }
+    public RematchSnapshot? Rematch { get; init; }
 }
 
 /// <summary>Actions acceptées par le serveur de partie.</summary>

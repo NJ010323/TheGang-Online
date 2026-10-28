@@ -114,6 +114,7 @@ public sealed class HostMigrationRenderingTests
                     nickname.Arrange(new Rect(0, 0, 12, 40));
                     Assert.Equal(12, nickname.ActualWidth);
                     Assert.Equal("Léo", peer.GetName());
+                    RematchRenderingChecks.Run();
                 }
                 finally { application.Shutdown(); }
             }

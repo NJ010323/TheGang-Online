@@ -415,13 +415,13 @@ public partial class MainWindow : Window
             if (await HandleHostMigrationAsync(session, lobby)) return;
             _lastLobbyStatus = lobby.Status;
             if (lobby.Status == LobbyStatus.Open && GamePanel.Visibility == Visibility.Visible)
-                ReturnToWaitingLobby();
+                ReturnToWaitingLobby(lobby.GameReturnReason);
             RenderLobbySummary(session, lobby);
             if (lobby.Status == LobbyStatus.Started)
             {
                 var game = await session.Client.GetGameAsync();
                 if (_session != session || _busy || _draggedTokenValue is not null) return;
-                if (game.RecentEvents.LastOrDefault()?.Sequence < _lastSeenEventSequence) return;
+                if (game.GameId == _lastGameId && game.RecentEvents.LastOrDefault()?.Sequence < _lastSeenEventSequence) return;
                 RenderGame(game);
             }
             UpdatePauseOverlay(lobby);
@@ -442,6 +442,11 @@ public partial class MainWindow : Window
         {
             await HandleReconnectFailureAsync(session);
         }
+        catch (System.Net.Http.HttpRequestException error) when (
+            error.StatusCode == System.Net.HttpStatusCode.Conflict && _lastRenderedPhase == GamePhase.Finished)
+        {
+            // Le vote peut rouvrir le lobby entre les deux lectures ; le prochain sondage le suivra.
+        }
         catch (Exception error)
         {
             if (_session == session)
@@ -454,7 +459,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Suit le retour au salon décidé par le serveur, en annulant tous les visuels de la partie arrêtée.</summary>
-    private void ReturnToWaitingLobby()
+    private void ReturnToWaitingLobby(string? reason = null)
     {
         StopCardDeal();
         HideHeistOutcome();
@@ -469,6 +474,8 @@ public partial class MainWindow : Window
         GamePanel.Visibility = Visibility.Collapsed;
         LobbyPanel.Visibility = Visibility.Visible;
         _lastRenderedPhase = null;
+        _currentRematch = null;
+        RematchPanel.Visibility = Visibility.Collapsed;
         _lastHeistNumber = _lastCommunityCount = 0;
         _lastSeenEventSequence = 0;
         _visibleHands.Clear();
@@ -479,7 +486,7 @@ public partial class MainWindow : Window
         ResetScoreCards();
         _refreshTimer.Interval = TimeSpan.FromSeconds(2);
         _connectionWarning = false;
-        ShowNotice("Moins de trois joueurs : retour au lobby. Invitez un joueur pour lancer une nouvelle partie.",
+        ShowNotice(reason ?? "Moins de trois joueurs : retour au lobby. Invitez un joueur pour lancer une nouvelle partie.",
             NoticeLevel.Info, autoHide: false);
     }
 
@@ -487,6 +494,20 @@ public partial class MainWindow : Window
     private void RenderGame(GameSnapshot game)
     {
         if (_session?.Client.Identity is not { } identity) return;
+        if (game.GameId != _lastGameId)
+        {
+            StopCardDeal();
+            HideHeistOutcome();
+            HideRoundTransition();
+            _lastGameId = game.GameId;
+            _lastRenderedPhase = null;
+            _lastHeistNumber = _lastCommunityCount = 0;
+            _lastSeenEventSequence = 0;
+            _lastShowdownRevealCount = -1;
+            _availableDebrief = null;
+            _visibleHands.Clear();
+            ResetScoreCards();
+        }
         LobbyPanel.Visibility = Visibility.Collapsed;
         GamePanel.Visibility = Visibility.Visible;
         _refreshTimer.Interval = TimeSpan.FromMilliseconds(500);
@@ -538,6 +559,7 @@ public partial class MainWindow : Window
         RenderControls(game, identity.PlayerId);
         ProcessGameEvents(game);
         RenderScoreCards(game);
+        RenderRematch(game);
     }
 
     /// <summary>Conserve les cartes déjà rendues et retourne seulement les nouvelles, dans l'ordre.</summary>
@@ -668,6 +690,7 @@ public partial class MainWindow : Window
         _availableDebrief = game.Phase is GamePhase.HeistComplete or GamePhase.Finished &&
             game.RevealedHands.Count == game.Players.Count ? game : null;
         ReviewHeistButton.Visibility = _availableDebrief is null ? Visibility.Collapsed : Visibility.Visible;
+        ReviewHeistButton.Content = game.Rematch is not null ? "↺  REVANCHE / DÉBRIEF" : "↺  REVOIR LE DÉBRIEF";
         var self = game.Players.First(player => player.Id == selfId);
         var choicesComplete = choosing && game.AllChoicesConfirmed;
         TokenActions.Visibility = choosing && !choicesComplete ? Visibility.Visible : Visibility.Collapsed;
@@ -879,6 +902,8 @@ public partial class MainWindow : Window
         _lastLobbyStatus = LobbyStatus.Open;
         _lastLobbySnapshot = null;
         _lastRenderedPhase = null;
+        _currentRematch = null;
+        RematchPanel.Visibility = Visibility.Collapsed;
         _lastHeistNumber = _lastCommunityCount = 0;
         _lastSeenEventSequence = 0;
         _lastShowdownRevealCount = -1;

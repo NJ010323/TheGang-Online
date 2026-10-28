@@ -91,6 +91,11 @@ public sealed class LobbyHttpClient : IDisposable
         CancellationToken cancellationToken = default) =>
         await PostAsync<GameSnapshot>($"lobbies/{Code}/game/actions", cancellationToken, action);
 
+    /// <summary>Vote pour une revanche ou demande le retour collectif au lobby.</summary>
+    public Task<LobbySnapshot> DecideRematchAsync(RematchDecision decision,
+        CancellationToken cancellationToken = default) =>
+        PostAsync<LobbySnapshot>($"lobbies/{Code}/game/rematch", cancellationToken, decision);
+
     /// <summary>Publie la position du jeton tenu sans modifier la partie.</summary>
     public async Task UpdateDragAsync(GameDragRequest drag, CancellationToken cancellationToken = default) =>
         await PostAsync<bool>($"lobbies/{Code}/game/drag", cancellationToken, drag);

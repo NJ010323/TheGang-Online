@@ -37,12 +37,12 @@ public partial class MainWindow
         // Deux dos reprennent le motif noir et or d'origine, derrière les faces du paquet.
         AddMenuCard(GildMenuCard(new Image
         {
-            Source = new BitmapImage(new Uri("pack://application:,,,/Assets/card-back.png")),
+            Source = new BitmapImage(new Uri("pack://application:,,,/TheGang;component/Assets/card-back.png")),
             Stretch = Stretch.Fill
         }, back: true), 65, 165, -32, 0);
         AddMenuCard(GildMenuCard(new Image
         {
-            Source = new BitmapImage(new Uri("pack://application:,,,/Assets/card-back.png")),
+            Source = new BitmapImage(new Uri("pack://application:,,,/TheGang;component/Assets/card-back.png")),
             Stretch = Stretch.Fill
         }, back: true), 325, 165, 32, 0);
 

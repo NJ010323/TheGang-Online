@@ -91,6 +91,9 @@ public sealed class LobbyHttpServer : IAsyncDisposable
         app.MapPost("/lobbies/{code}/game/actions", (string code, HttpRequest request,
             GameActionRequest action) =>
             Respond(() => lobby.Apply(code, SessionToken(request), action)));
+        app.MapPost("/lobbies/{code}/game/rematch", (string code, HttpRequest request,
+            RematchDecision decision) =>
+            Respond(() => lobby.DecideRematch(code, SessionToken(request), decision)));
         app.MapPost("/lobbies/{code}/game/drag", (string code, HttpRequest request,
             GameDragRequest drag) =>
             Respond(() => lobby.UpdateDrag(code, SessionToken(request), drag)));

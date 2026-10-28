@@ -8,7 +8,7 @@ using Model.Lobby;
 namespace Network;
 
 /// <summary>État autoritaire d'un lobby sur l'ordinateur de l'hôte.</summary>
-public sealed class HostedLobby
+public sealed partial class HostedLobby
 {
     // Un seul verrou sérialise les commandes réseau et protège le moteur de partie.
     private readonly object _sync = new();
@@ -272,8 +272,14 @@ public sealed class HostedLobby
             {
                 // Le moteur conserve la main et les jetons du joueur pendant sa courte absence.
                 MarkAbsent(playerId, _clock.GetUtcNow());
-                if (_lobby.Status == LobbyStatus.Started && _lobby.Players.Count - _absentUntil.Count < 3)
+                if (_rematch is not null ||
+                    _lobby.Status == LobbyStatus.Started && _lobby.Players.Count - _absentUntil.Count < 3)
+                {
+                    _gameReturnReason = _rematch is not null
+                        ? "Un joueur a quitté la table : retour au lobby."
+                        : null;
                     ReturnToLobbyAfterDeparture();
+                }
             }
             else
             {
@@ -313,6 +319,8 @@ public sealed class HostedLobby
         foreach (var playerId in departed) _lastSeenGuests.Remove(playerId);
         _absentUntil.Clear();
         _game = null;
+        _rematch = null;
+        _rematchAccepted.Clear();
         _migrationSetup = null;
         _events.Clear();
         _nextEventSequence = 0;
@@ -332,6 +340,8 @@ public sealed class HostedLobby
             if (_migrationSetup is { } setup && _lobby.Players.Count < setup.ExpectedPlayers.Count)
                 throw new InvalidOperationException("Tous les joueurs transférés ne sont pas encore arrivés.");
             _game = _manager.StartGame(Code, playerId);
+            _gameId = Guid.NewGuid();
+            _gameReturnReason = null;
             _events.Clear();
             _nextEventSequence = 0;
             _activeDrags.Clear();
@@ -439,6 +449,7 @@ public sealed class HostedLobby
                     EnsureHost(playerId);
                     var succeeded = game.ResolveHeist();
                     RecordEvent(GameEventKind.HeistResolved, playerId, game, heistSucceeded: succeeded);
+                    if (game.Phase == GamePhase.Finished) BeginRematchVote();
                     break;
                 case GameAction.StartNextHeist:
                     EnsureHost(playerId);
@@ -547,6 +558,11 @@ public sealed class HostedLobby
                 if (playerId != preparingSuccessor && !_absentUntil.ContainsKey(playerId) &&
                     now - lastSeen >= HeartbeatTimeout)
                     MarkAbsent(playerId, lastSeen + HeartbeatTimeout);
+        if (_rematch is { } vote && now >= vote.ExpiresAtUtc)
+        {
+            _gameReturnReason = "Le délai de revanche est écoulé : retour au lobby.";
+            ReturnToLobbyAfterDeparture();
+        }
         if (_absentUntil.Values.Any(until => now >= until))
         {
             _manager.CloseLobby(Code, _lobby.HostId);
@@ -595,6 +611,7 @@ public sealed class HostedLobby
     private LobbySnapshot Snapshot() =>
         new(Code, _lobby.HostId, _lobby.MaxPlayers, _lobby.Status, _lobby.Players)
         {
+            GameReturnReason = _gameReturnReason,
             AbsentPlayers = _absentUntil.Select(entry => new AbsentPlayerSnapshot(entry.Key,
                 _lobby.Players.First(player => player.Id == entry.Key).Name, entry.Value)).ToArray(),
             HostMigration = _migration is null ? null : _migration with
@@ -644,6 +661,9 @@ public sealed class HostedLobby
                 .Where(active => DateTimeOffset.UtcNow - active.Updated < TimeSpan.FromSeconds(4))
                 .Select(active => active.Drag).ToArray())
         {
+            GameId = _gameId,
+            Rematch = _rematch is null ? null : _rematch with
+            { ServerNowUtc = _clock.GetUtcNow(), AcceptedPlayers = _rematchAccepted.ToArray() },
             RevealedHands = game.RevealedHands.Select(hand => new RevealedHandSnapshot(hand.PlayerId,
                 hand.TokenValue, hand.Score.Rank, hand.Score.Tiebreakers.ToArray())).ToArray()
         };

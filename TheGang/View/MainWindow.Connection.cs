@@ -74,7 +74,7 @@ public partial class MainWindow
     /// <summary>Affiche à tous les joueurs absents et le temps restant avant la fermeture.</summary>
     private void UpdatePauseOverlay(LobbySnapshot lobby)
     {
-        if (lobby.AbsentPlayers.Count == 0)
+        if (lobby.AbsentPlayers.Count == 0 || _currentRematch is not null)
         {
             PausedGameOverlay.Visibility = Visibility.Collapsed;
             return;
