@@ -8,17 +8,20 @@ namespace Updates;
 
 public sealed record ReleaseAsset(string Name, long Size, string Digest, [property: JsonPropertyName("browser_download_url")] string Url);
 public sealed record GithubRelease([property: JsonPropertyName("tag_name")] string Tag, bool Draft, bool Prerelease, ReleaseAsset[] Assets);
+public enum UpdateStage { Search, Download, Prepare, Install, Restart }
+public sealed record UpdateProgress(UpdateStage Stage, string Text, double? Percent = null,
+    long? DownloadedBytes = null, long? TotalBytes = null);
 public sealed record PreparedUpdate(string Directory, string Version);
 
 /// <summary>Consulte GitHub sans jeton, prépare un paquet vérifié et ne modifie jamais le dossier installé.</summary>
 public sealed class UpdateClient(HttpClient http)
 {
     public const string AssetName = "TheGang-win-x64.zip";
-    public async Task<PreparedUpdate?> Prepare(string installation, string state, Version current, IProgress<(string Text, double? Percent)> progress, CancellationToken token)
+    public async Task<PreparedUpdate?> Prepare(string installation, string state, Version current, IProgress<UpdateProgress> progress, CancellationToken token)
     {
         var configuration = UpdateFiles.Read<UpdateConfiguration>(Path.Combine(installation, "update-settings.json"));
         if (!System.Text.RegularExpressions.Regex.IsMatch(configuration.Repository, @"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")) throw new InvalidDataException("Dépôt de distribution non configuré.");
-        progress.Report(("Recherche de mise à jour…", null));
+        progress.Report(new(UpdateStage.Search, "Recherche de mise à jour…"));
         using var check = CancellationTokenSource.CreateLinkedTokenSource(token);
         check.CancelAfter(TimeSpan.FromSeconds(10));
         using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{configuration.Repository}/releases/latest");
@@ -45,25 +48,31 @@ public sealed class UpdateClient(HttpClient http)
             using var download = CancellationTokenSource.CreateLinkedTokenSource(token);
             download.CancelAfter(TimeSpan.FromMinutes(5));
             var zip = Path.Combine(work, "download.zip");
-            progress.Report(("Téléchargement…", 0));
+            progress.Report(new(UpdateStage.Download, "Téléchargement de la nouvelle version en cours…", 0, 0, asset.Size));
             using (var data = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, download.Token))
             {
                 data.EnsureSuccessStatusCode();
                 await using var input = await data.Content.ReadAsStreamAsync(download.Token);
                 await using var output = File.Create(zip);
                 var buffer = new byte[81920]; long count = 0; int read;
+                var reportClock = System.Diagnostics.Stopwatch.StartNew();
                 while ((read = await input.ReadAsync(buffer, download.Token)) > 0)
                 {
                     count += read;
                     if (count > asset.Size) throw new InvalidDataException("Téléchargement trop volumineux.");
                     await output.WriteAsync(buffer.AsMemory(0, read), download.Token);
-                    progress.Report(("Téléchargement…", count * 100d / asset.Size));
+                    if (count == asset.Size || reportClock.ElapsedMilliseconds >= 100)
+                    {
+                        progress.Report(new(UpdateStage.Download, "Téléchargement de la nouvelle version en cours…",
+                            count * 100d / asset.Size, count, asset.Size));
+                        reportClock.Restart();
+                    }
                 }
                 if (count != asset.Size) throw new InvalidDataException("Téléchargement incomplet.");
             }
+            progress.Report(new(UpdateStage.Prepare, "Préparation de la nouvelle version…"));
             await using (var stream = File.OpenRead(zip))
                 if (!Convert.ToHexString(await SHA256.HashDataAsync(stream, download.Token)).Equals(asset.Digest[7..], StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Le téléchargement est corrompu.");
-            progress.Report(("Vérification…", null));
             var staged = Path.Combine(work, "staged");
             await Task.Run(async () =>
             {

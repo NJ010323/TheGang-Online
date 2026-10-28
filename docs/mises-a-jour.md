@@ -8,7 +8,7 @@ Les sessions restent en mémoire. Les timers, le serveur et le tunnel ne démarr
 
 Les seules données persistantes trouvées sont le ticket invité `%LOCALAPPDATA%\TheGang\guest-resume.dat`, protégé par DPAPI pour le compte Windows courant. Les paramètres visuels sont en mémoire ; aucune migration de sauvegarde n'est nécessaire. Les mises à jour n'accèdent jamais au ticket, aux invitations ni aux jetons de session. Les fichiers personnels non possédés par le manifeste restent en place ; une collision sur un nouveau nom de fichier bloque l'installation. Les fichiers retirés d'un futur manifeste sont conservés, pour éviter de supprimer des données par erreur.
 
-`Updates` est une bibliothèque .NET 8 sans dépendance externe, testable sans WPF. `Updater` est un petit exécutable autonome, sans interface normale. Il est copié dans le profil utilisateur avant fermeture et remplace également sa propre version distribuée. Aucun lanceur à ouvrir.
+`Updates` est une bibliothèque .NET 8 sans dépendance externe, testable sans WPF. `Updater` est un exécutable Windows WPF autonome qui affiche les étapes d’installation et de redémarrage avec le même panneau que le jeu. Il est copié dans le profil utilisateur avant fermeture et remplace également sa propre version distribuée. Aucun lanceur à ouvrir.
 
 ## Première distribution
 
@@ -28,10 +28,12 @@ Une ancienne version sans cette fonctionnalité doit recevoir cette première di
 
 ## Démarrage et récupération
 
-1. Le menu habituel est affiché, temporairement désactivé, avec un bandeau discret. Alt+F4 peut annuler cette phase. La vérification GitHub est asynchrone et limitée à 10 secondes.
+1. Le menu habituel est affiché, temporairement désactivé, avec un panneau central sombre bordé d’or. Les cinq étapes (recherche, téléchargement, préparation, installation et redémarrage) y sont indiquées. Alt+F4 peut annuler cette phase. La vérification GitHub est asynchrone et limitée à 10 secondes.
 2. Le client consulte `/repos/{Repository}/releases/latest` sans jeton. Il ignore brouillons/préversions, compare numériquement les versions stables `vX.Y.Z` et n'accepte que `TheGang-win-x64.zip`. Les builds, tags et manifestes utilisent la même version.
-3. Une nouvelle version est téléchargée en zone temporaire, avec progression et limite totale de cinq minutes. Le SHA-256 du ZIP est comparé au digest fourni par GitHub. Puis chaque fichier est vérifié contre le manifeste. L'extraction interdit chemins absolus, traversées, sous-dossiers, doublons, ADS NTFS et liens symboliques ; les tailles et nombres de fichiers sont bornés.
+3. Une nouvelle version est téléchargée en zone temporaire, avec progression et limite totale de cinq minutes. Le panneau affiche « Téléchargement de la nouvelle version en cours… », une barre dorée animée, le pourcentage et les Mo reçus sur le total. Les étapes sans progression mesurable utilisent une animation indéterminée ; les animations respectent le réglage Windows. Le SHA-256 du ZIP est comparé au digest fourni par GitHub. Puis chaque fichier est vérifié contre le manifeste. L'extraction interdit chemins absolus, traversées, sous-dossiers, doublons, ADS NTFS et liens symboliques ; les tailles et nombres de fichiers sont bornés.
 4. Le jeu lance sa copie temporaire de l'auxiliaire et attend sa confirmation avant de fermer proprement. L'auxiliaire attend la fin du PID exact, vérifie aussi son heure de création et n'arrête aucun processus existant.
+L’auxiliaire conserve son propre panneau visible après la fermeture du jeu ; sa fermeture masque le panneau sans interrompre une transaction en cours.
+
 5. Un mutex coordonne les démarrages et les auxiliaires. Les clients ouverts partagent un verrou de lecture par installation ; l'auxiliaire exige un verrou exclusif. Plusieurs clients peuvent donc jouer depuis le même dossier. S'ils restent ouverts, l'installation est abandonnée après attente, sans interrompre leurs parties. Un seul client par installation effectue la recherche à la fois.
 6. L'auxiliaire revérifie le paquet, sauvegarde les fichiers existants, écrit et force sur disque un journal avant toute modification. Chaque remplacement utilise un fichier temporaire puis un renommage. Les fichiers personnels inconnus ne sont pas écrasés. L'auxiliaire relance le même `TheGang.exe` et attend jusqu'à 45 secondes que sa fenêtre confirme son initialisation.
 7. Après confirmation, le journal est supprimé. En cas d'échec, les fichiers sauvegardés sont restaurés, les fichiers nouvellement ajoutés sont retirés et l'ancienne version redémarre avec un message français. Un tag échoué est mémorisé et ignoré : publier un nouveau numéro pour le corriger. Le redémarrage de validation et celui de récupération ne refont pas la recherche.

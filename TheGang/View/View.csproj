@@ -27,4 +27,4 @@
       <Resource Include="Assets\*.png" />
     </ItemGroup>
 
-</Project>
+<ItemGroup><Compile Include="../Updates/UpdateProgressPanel.cs" Link="UpdateProgressPanel.cs" /></ItemGroup></Project>

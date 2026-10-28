@@ -105,7 +105,7 @@ public sealed class UpdateTests : IDisposable
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) => Task.FromResult(respond(request));
     }
-    private async Task<PreparedUpdate?> Check(string tag, bool draft = false, bool prerelease = false, string? badDownload = null, bool failedBefore = false)
+    private async Task<PreparedUpdate?> Check(string tag, bool draft = false, bool prerelease = false, string? badDownload = null, bool failedBefore = false, IProgress<UpdateProgress>? progress = null)
     {
         var installation = Folder("game"); var state = Folder("state");
         UpdateFiles.Write(Path.Combine(installation, "update-settings.json"), new UpdateConfiguration("example/game"));
@@ -121,7 +121,28 @@ public sealed class UpdateTests : IDisposable
             var payload = badDownload == "truncated" ? bytes[..(bytes.Length / 2)] : badDownload == "corrupt" ? new byte[bytes.Length] : bytes;
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(payload) };
         }));
-        return await new UpdateClient(http).Prepare(installation, state, new Version(1, 0, 0), new Progress<(string, double?)>(), CancellationToken.None);
+        return await new UpdateClient(http).Prepare(installation, state, new Version(1, 0, 0), progress ?? new Progress<UpdateProgress>(), CancellationToken.None);
+    }
+    private sealed class ProgressRecorder : IProgress<UpdateProgress>
+    {
+        public List<UpdateProgress> Values { get; } = [];
+        public void Report(UpdateProgress value) => Values.Add(value);
+    }
+    [Fact]
+    public async Task ReportsStagesAndExactDownloadSizeBeforePreparingPackage()
+    {
+        var progress = new ProgressRecorder();
+        Assert.NotNull(await Check("v1.1.0", progress: progress));
+        Assert.Equal(UpdateStage.Search, progress.Values[0].Stage);
+        Assert.Equal(UpdateStage.Prepare, progress.Values[^1].Stage);
+        var download = progress.Values.Where(value => value.Stage == UpdateStage.Download).ToArray();
+        Assert.Equal(0d, download[0].Percent);
+        Assert.Equal(0L, download[0].DownloadedBytes);
+        Assert.Equal(100d, download[^1].Percent);
+        Assert.True(download[^1].TotalBytes > 0);
+        Assert.Equal(download[^1].TotalBytes, download[^1].DownloadedBytes);
+        Assert.All(download, value => Assert.Equal("Téléchargement de la nouvelle version en cours…", value.Text));
+        Assert.Equal(download.Select(value => value.DownloadedBytes).Order(), download.Select(value => value.DownloadedBytes));
     }
     [Fact] public async Task DownloadsAndChecksNewVersion() => Assert.NotNull(await Check("v1.1.0"));
     [Fact] public async Task SameVersionDoesNotRestart() => Assert.Null(await Check("v1.0.0"));
@@ -146,7 +167,7 @@ public sealed class UpdateTests : IDisposable
         UpdateFiles.Write(Path.Combine(installation, "update-settings.json"), new UpdateConfiguration("example/game"));
         File.WriteAllText(Path.Combine(installation, "TheGang.exe"), "old");
         using var http = new HttpClient(new Handler(_ => throw new HttpRequestException("offline")));
-        await Assert.ThrowsAsync<HttpRequestException>(() => new UpdateClient(http).Prepare(installation, Folder("state"), new Version(1, 0, 0), new Progress<(string, double?)>(), CancellationToken.None));
+        await Assert.ThrowsAsync<HttpRequestException>(() => new UpdateClient(http).Prepare(installation, Folder("state"), new Version(1, 0, 0), new Progress<UpdateProgress>(), CancellationToken.None));
         Assert.Equal("old", File.ReadAllText(Path.Combine(installation, "TheGang.exe")));
     }
 }

@@ -1,3 +1,4 @@
+using System.IO;
 using System.Diagnostics;
 using Updates;
 
@@ -19,6 +20,8 @@ FileStream operation;
 try { operation = File.Open(Path.Combine(state, "transaction.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
 catch (IOException) { return; }
 using var operationLifetime = operation;
+using var display = new UpdateDisplay();
+if (version == "--recover") display.Report(new(UpdateStage.Install, "Restauration de la version précédente…"));
 File.WriteAllText(Path.Combine(state, "helper-ready"), "ready");
 Process? restarted = null;
 FileStream? exclusive = null;
@@ -62,7 +65,13 @@ try
         }
     }
     finally { exclusive?.Dispose(); exclusive = null; gate.ReleaseMutex(); }
-    if (version == "--recover") { StartGame("--update-recovered"); return; }
+    if (version == "--recover")
+    {
+        display.Report(new(UpdateStage.Restart, "Redémarrage du jeu…"));
+        StartGame("--update-recovered");
+        return;
+    }
+    display.Report(new(UpdateStage.Restart, "Redémarrage du jeu…"));
     restarted = StartGame("--update-health");
     var deadline = DateTime.UtcNow.AddSeconds(45);
     while (DateTime.UtcNow < deadline && !File.Exists(Path.Combine(state, "healthy")) && !restarted.HasExited) await Task.Delay(250);

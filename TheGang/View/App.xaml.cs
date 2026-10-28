@@ -72,10 +72,10 @@ public partial class App : Application
             // L'interface habituelle reste visible, mais aucune partie ne peut démarrer.
             var content = (UIElement)window.Content;
             content.IsEnabled = false;
-            var status = new TextBlock { Foreground = Brushes.Wheat, FontSize = 17, Margin = new Thickness(18), Text = "Recherche de mise à jour…" };
-            var bar = new ProgressBar { Height = 4, IsIndeterminate = true, Margin = new Thickness(18, 0, 18, 14) };
-            var panel = new StackPanel { Background = new SolidColorBrush(Color.FromRgb(25, 16, 16)), VerticalAlignment = VerticalAlignment.Top };
-            panel.Children.Add(status); panel.Children.Add(bar);
+            var panel = new Grid { Background = new SolidColorBrush(Color.FromArgb(215, 12, 9, 13)) };
+            var updatePanel = new UpdateProgressPanel { HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center };
+            panel.Children.Add(updatePanel);
             window.Content = null;
             var grid = new Grid(); grid.Children.Add(content); grid.Children.Add(panel); window.Content = grid;
             window.Closed += (_, _) => { _shutdown.Cancel(); Shutdown(); };
@@ -83,12 +83,13 @@ public partial class App : Application
             var health = e.Args.Contains("--update-health");
             if (File.Exists(Path.Combine(state, "journal.json")) && !health)
             {
-                status.Text = "Restauration de la version précédente…";
+                updatePanel.Report(new(UpdateStage.Install, "Restauration de la version précédente…"));
                 await Handoff(installation, state, state, "--recover", _shutdown.Token);
                 Shutdown(); return;
             }
             if (health)
             {
+                updatePanel.Report(new(UpdateStage.Restart, "Redémarrage du jeu…"));
                 UpdateFiles.Write(Path.Combine(state, "healthy"), new { Ready = true });
             }
             else if (_checkLock is not null && !e.Args.Contains("--update-recovered") && File.Exists(Path.Combine(installation, "update-settings.json")))
@@ -96,14 +97,13 @@ public partial class App : Application
                 try
                 {
                     using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
-                    var progress = new Progress<(string Text, double? Percent)>(p =>
-                    { status.Text = p.Text; bar.IsIndeterminate = p.Percent is null; bar.Value = p.Percent ?? 0; });
+                    var progress = new Progress<UpdateProgress>(updatePanel.Report);
                     var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version!;
                     var current = new Version(assemblyVersion.Major, assemblyVersion.Minor, assemblyVersion.Build);
                     var update = await new UpdateClient(http).Prepare(installation, state, current, progress, _shutdown.Token);
                     if (update is not null)
                     {
-                        status.Text = "Installation et redémarrage…";
+                        updatePanel.Report(new(UpdateStage.Install, "Installation de la nouvelle version…"));
                         await Handoff(installation, state, update.Directory, update.Version, _shutdown.Token);
                         Shutdown(); return;
                     }
