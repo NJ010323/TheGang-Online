@@ -12,6 +12,7 @@ public partial class MainWindow
     /// <summary>Crée les quatre tours et les combinaisons illustrées une seule fois.</summary>
     private void PopulateRulesCard()
     {
+        RulesScroll.Resources.Add(typeof(System.Windows.Controls.Primitives.ScrollBar),ReleaseNotesOverlay.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)]);
         AddRound("01", "PRÉFLOP · BLANC", "Deux cartes privées ; jeton blanc.",
             Color.FromRgb(230, 230, 220));
         AddRound("02", "FLOP · JAUNE", "Trois cartes communes ; jeton jaune.",
@@ -68,7 +69,7 @@ public partial class MainWindow
                 VerticalAlignment = VerticalAlignment.Center
             }
         });
-        var words = new StackPanel();
+        var words = new StackPanel { Margin=new Thickness(8,0,0,0) };
         words.Children.Add(new TextBlock
         {
             Text = title,
@@ -93,10 +94,10 @@ public partial class MainWindow
     private void AddHand(string name, params (int Rank, CardColors Suit)[] cards)
     {
         var index = PokerHandRowsPanel.Children.Count + 1;
-        // Marges resserrées : les dix exemples conservent des cartes lisibles sur une seule page.
+        // Les cartes gardent leurs proportions et les noms restent séparés par une marge lisible.
         var row = new Grid { Margin = new Thickness(0, 0, 0, 1) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(25) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(270) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(230) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.Children.Add(new TextBlock
         {
@@ -109,7 +110,7 @@ public partial class MainWindow
         var illustration = new StackPanel { Orientation = Orientation.Horizontal };
         foreach (var (rank, suit) in cards)
         {
-            var card = TableVisuals.Card(new CardSnapshot(suit, rank), 52, 57);
+            var card = TableVisuals.Card(new CardSnapshot(suit, rank), 42, 60);
             card.Margin = new Thickness(1, 0, 1, 1);
             illustration.Children.Add(card);
         }
@@ -117,6 +118,7 @@ public partial class MainWindow
         row.Children.Add(illustration);
         var label = new TextBlock
         {
+            Margin = new Thickness(18,0,0,0),
             Text = name,
             Foreground = new SolidColorBrush(Color.FromRgb(57, 37, 30)),
             FontWeight = FontWeights.SemiBold,
@@ -130,8 +132,18 @@ public partial class MainWindow
     }
 
     /// <summary>Ouvre les règles depuis le menu ou la table sans modifier la partie.</summary>
-    private void OpenRules_Click(object sender, RoutedEventArgs e) =>
+    private void OpenRules_Click(object sender, RoutedEventArgs e)
+    {
+        var special=_lastSpecialGame?.Special;
+        RulesMissionText.Text="De 3 à 6 joueurs, classez vos mains de la plus faible à la plus forte. Les cartes communes servent à tous. Les mains restent secrètes jusqu’à la révélation.";
+        RulesVictoryText.Text=$"Trois coffres pour gagner. {special?.AlarmLimit??3} alarmes mettent fin à la partie.";
+        RulesSpecialHint.Text=special is null?"Standard : deux cartes personnelles, quatre tours de jetons. Les difficultés et leurs effets se consultent dans le salon.":"Mode "+Model.Game.DifficultyRules.Name(special.Difficulty)+" · "+Model.Game.DifficultyRules.Description(special.Difficulty);
+        if(special?.ActiveCards.Length>0)
+            RulesSpecialHint.Text+="\n\nCartes actives : "+string.Join(", ",special.ActiveCards.Select(id=>Model.Game.SpecialCards.Get(id).Name))+". Consultez leur effet avec le bouton ci-dessous.";
         RulesOverlay.Visibility = Visibility.Visible;
+    }
+    private void RulesSpecialCards_Click(object sender,RoutedEventArgs e)
+    {CloseRulesCard();OpenSpecialInterface();}
 
     private void CloseRulesCard_Click(object sender, RoutedEventArgs e) => CloseRulesCard();
 

@@ -26,12 +26,13 @@ public partial class MainWindow
         OutcomeSubtitle.Text = game.Result switch
         {
             GameResult.Won => "Trois braquages réussis : la bande remporte la partie !",
-            GameResult.Lost => "Trois alarmes : la mission est terminée.",
+            GameResult.Lost => $"{game.Special?.AlarmLimit??3} alarmes : la mission est terminée.",
             _ when succeeded => $"L'ordre des mains est correct. Encore {3 - game.SuccessfulHeists} " +
                 $"carte{(3 - game.SuccessfulHeists > 1 ? "s" : string.Empty)} d'or pour ouvrir le coffre.",
             _ => "L'ordre des mains est incorrect. Une alarme s'ajoute à la partie."
         };
         PopulateHeistDebrief(game);
+        if(game.Special?.FailureReason is {} reason) OutcomeSubtitle.Text=reason;
         OutcomeTitle.Foreground = succeeded
             ? new SolidColorBrush(Color.FromRgb(248, 209, 115))
             : new SolidColorBrush(Color.FromRgb(255, 137, 122));

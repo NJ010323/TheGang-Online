@@ -4,7 +4,7 @@ Prototype d'application bureau pour **The Gang**, avec une logique de jeu indép
 
 ## Ce qui fonctionne aujourd'hui
 
-Le moteur peut exécuter une partie complète du **jeu de base**, du premier braquage jusqu'à la victoire ou la défaite. Les tests couvrent aussi le cas d'une partie qui dure cinq braquages. L'application WPF propose un menu, un lobby et une table de jeu pour 3 à 6 joueurs au départ ; si un départ volontaire ou une relève laisse moins de trois joueurs, la partie est arrêtée et les joueurs restants reviennent au lobby. Les règles optionnelles (défis, spécialistes, variantes de difficulté) ne sont pas encore implémentées.
+Le moteur peut exécuter une partie complète du **jeu de base**, du premier braquage jusqu'à la victoire ou la défaite. Les tests couvrent aussi le cas d'une partie qui dure cinq braquages. L'application WPF propose un menu, un lobby et une table de jeu pour 3 à 6 joueurs au départ ; si un départ volontaire ou une relève laisse moins de trois joueurs, la partie est arrêtée et les joueurs restants reviennent au lobby. Les modes Standard, Avancé, Pro et Gangster ainsi que les 20 cartes Effraction et Complice du livret français sont jouables. Consultez le bouton Difficulté du salon et Cartes & effets pendant la partie.
 
 ## État du moteur
 
@@ -65,6 +65,22 @@ des amis pour une vraie partie. Le parcours peut être quitté ou recommencé à
 moment et ne crée aucune session réseau, réservation de place ou donnée de reprise.
 Il s'agit d'un exercice guidé, pas d'un mode solo avec intelligence artificielle.
 
+## Parcours et ateliers du tutoriel
+
+Le bouton du menu ouvre **L’École du braquage** : initiation Standard en 17 étapes,
+parcours Avancé de 20 ateliers, parcours Pro de 19 ateliers et parcours Gangster de
+9 ateliers. Il est aussi possible de lancer directement une carte dans les ateliers
+à la carte. Chaque exercice emploie le vrai moteur, les jetons, les commandes et les
+animations du plateau ; les deux complices simulés jouent leurs choix et leurs votes.
+Les scénarios imposent leurs cartes et fournissent des conseils réservés à l’entraînement.
+L’Informateur montre au joueur une information privée ; Conductrice s’utilise après
+le flop ; les choix, défausses et estimations se font dans **Cartes & effets**.
+
+Les Effractions et Complices ont maintenant vingt dessins vectoriels originaux dans
+le style du jeu (`SpecialCardVisuals.cs`). Les familles et leur rôle sont expliqués
+dans les difficultés, le catalogue et le menu des tutoriels. La règle est défilante,
+avec des exemples de mains proportionnés et des textes espacés des cartes.
+
 ## Notes de mise à jour dans le jeu
 
 Le cartouche en bas du menu principal met en avant la dernière version. **Notes de
@@ -82,7 +98,7 @@ maintenir dans le code de l'interface.
 
 Le menu permet d'héberger, de rejoindre, de consulter les **Règles du jeu** ou de quitter. La carte de règles explique la mission, les quatre tours de jetons, les confirmations, la révélation, la victoire et les combinaisons de poker illustrées ; elle reste aussi accessible près de la main pendant une partie. Le panneau **Paramètres** propose le mode fenêtré ou plein écran ainsi que l'activation des animations du plateau. **F11** change aussi le mode d'affichage ; **Échap** ferme les paramètres ou quitte le plein écran. Une confirmation dans le style du jeu précède désormais le départ d'un lobby, l'abandon d'une partie ou la fermeture complète de l'application, y compris par la croix de la fenêtre ou Alt+F4. Elle précise si le lobby sera fermé pour tous ou si la place de l'invité restera réservée. L'hôte choisit la capacité du lobby avec les boutons 3 à 6 joueurs à la création et dans le salon, puis lance la partie quand au moins trois joueurs sont présents. Les confirmations et erreurs s'affichent dans un bandeau visible en haut de l'écran.
 
-Pendant la partie, le joueur local est en bas du tapis et les autres joueurs sont répartis autour de la table. Leurs cartes restent face cachée jusqu'à la révélation autorisée par le serveur. Pour prendre un jeton, glissez-le depuis le centre vers votre main ; pour reprendre un jeton, glissez celui d'un autre joueur. Vous ne pouvez prendre un jeton que si vous n’en avez pas. Votre jeton ne peut plus être rendu ni remplacé, mais un joueur sans jeton peut vous le prendre. Les jetons sont recadrés sur leur cercle et leur chiffre est centré dans un médaillon sombre bordé d'or. Une plaque sous chaque main indique le choix ou la confirmation ; quatre points colorés rappellent les tours dont les jetons sont déjà connus. Le tableau latéral indique les valeurs exactes des jetons par joueur et peut être masqué pour agrandir le tapis. Une petite carte **Aide de jeu** reste près de votre main : cliquez dessus pour consulter les quatre tours et les dix combinaisons de poker sur une seule page, sans défilement. Les faces des cartes sont dessinées en vecteurs avec leurs indices, les enseignes répétées des cartes numérotées et des figures doubles pour le valet, la dame et le roi.
+Pendant la partie, le joueur local est en bas du tapis et les autres joueurs sont répartis autour de la table. Leurs cartes restent face cachée jusqu'à la révélation autorisée par le serveur. Pour prendre un jeton, glissez-le depuis le centre vers votre main ; pour reprendre un jeton, glissez celui d'un autre joueur. Vous ne pouvez prendre un jeton que si vous n’en avez pas. Votre jeton ne peut plus être rendu ni remplacé, mais un joueur sans jeton peut vous le prendre. Les jetons sont recadrés sur leur cercle et leur chiffre est centré dans un médaillon sombre bordé d'or. Une plaque sous chaque main indique le choix ou la confirmation ; quatre points colorés rappellent les tours dont les jetons sont déjà connus. Le tableau latéral indique les valeurs exactes des jetons par joueur et peut être masqué pour agrandir le tapis. Une petite carte **Aide de jeu** reste près de votre main : cliquez dessus pour consulter les quatre tours et les dix combinaisons de poker dans un panneau défilant et lisible. Les faces des cartes sont dessinées en vecteurs avec leurs indices, les enseignes répétées des cartes numérotées et des figures doubles pour le valet, la dame et le roi.
 
 Pendant qu'un joueur glisse un jeton, les autres voient sa position et son pseudo sur le tapis. Le client envoie des positions temporaires à l'hôte ; seul le dépôt sur la main applique la prise ou la reprise au moteur. Chaque prise, reprise et révélation est ordonnée par l'hôte et inscrite dans le journal des actions. Le plateau est actualisé toutes les 500 ms pendant une partie, et toutes les 200 ms lorsqu'un glissement distant est en cours. Les délais du réseau peuvent décaler légèrement ce mouvement. À chaque passage au flop, au turn, à la river ou à la révélation finale, une annonce colorée apparaît sur le tapis ; les nouvelles cartes communes se retournent dans l'ordre et les jetons du nouveau tour apparaissent. La place du prochain joueur à révéler est mise en évidence. En haut, six cartes sont face cachée : chaque braquage réussi retourne une carte d'or et chaque échec une carte d'alarme. Une alarme rouge scintille après un échec ; le coffre ne s'ouvre qu'à la troisième carte d'or. Le panneau de résultat se ferme avec **Continuer** ou **Échap** ; il disparaît automatiquement après huit secondes pour un braquage intermédiaire, mais reste visible en fin de partie. Les cartes de score se retournent après sa fermeture. Les commandes de l'hôte et des invités occupent la même hauteur de pied de page. La désactivation des animations conserve les annonces et les images finales, sans mouvements. Le curseur du jeu utilise un gant en laine noir.
 
@@ -141,3 +157,13 @@ Les distributions Windows intègrent désormais la vérification GitHub Releases
 ## Installateur pour les joueurs
 
 Le jeu peut être distribué dans un seul fichier `TheGang-Setup-<version>-win-x64.exe`, avec un assistant en français, un raccourci Démarrer, un raccourci Bureau optionnel et une désinstallation Windows. L'installation se fait dans le profil du joueur pour permettre les mises à jour automatiques sans droits administrateur. Voir [le guide de création et de validation de l'installateur](docs/installateur-windows.md).
+
+## Version 0.1.0
+
+Quatre difficultés, vingt cartes spéciales et des ateliers jouables par difficulté.
+Les décisions des effets s’affichent sous le plateau ; les cartes actives restent
+sur le tapis et une radio permet de coordonner les choix de la bande.
+Voir [les difficultés et les cartes](docs/difficultes.md) et
+[les notes complètes de la 0.1.0](docs/releases/v0.1.0.md).
+Les paquets publiés sont archivés dans `TheGang/artifacts/release_vX.Y.Z` ;
+`gametest` contient la version de test courante, selon les consignes d’AGENTS.md.

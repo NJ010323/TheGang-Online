@@ -18,8 +18,6 @@ internal static class TableVisuals
     /// <summary>Préférence locale : les mouvements du plateau peuvent être réduits dans les paramètres.</summary>
     public static bool AnimationsEnabled { get; set; } = true;
 
-    private static readonly ImageSource CardBack = new BitmapImage(
-        new Uri("pack://application:,,,/TheGang;component/Assets/card-back.png", UriKind.Absolute));
     private static readonly BitmapSource ChipAtlas = new BitmapImage(
         new Uri("pack://application:,,,/TheGang;component/Assets/chip-atlas.png", UriKind.Absolute));
     private static readonly IReadOnlyDictionary<TokenColors, BitmapSource> ChipSprites = CreateChipSprites();
@@ -54,16 +52,7 @@ internal static class TableVisuals
     /// <summary>Crée une carte cachée avec le sprite ou une carte visible avec sa valeur réelle.</summary>
     public static FrameworkElement Card(CardSnapshot? card, double width = 58, double height = 84)
     {
-        if (card is null)
-            return new Image
-            {
-                Source = CardBack,
-                Width = width,
-                Height = height,
-                Stretch = Stretch.Fill,
-                Margin = new Thickness(3)
-            };
-        return PlayingCardVisuals.Face(card, width, height);
+        return GildedCardVisuals.Create(card, width, height);
     }
 
     /// <summary>Retourne une carte commune de dos vers sa face après un délai, sans reconstruire le plateau.</summary>
@@ -142,7 +131,23 @@ internal static class TableVisuals
             IsHitTestVisible = false
         });
         chip.Children.Add(NumberShape(value, size));
+        chip.Tag=color;
         return chip;
+    }
+
+    // Même silhouette et même couronne ; la face sombre inverse le contraste du médaillon.
+    internal static void DarkenChip(FrameworkElement element)
+    {
+        if(element is not Grid chip || chip.Children.Count<4)return;
+        var face=(Ellipse)chip.Children[1];
+        var color=chip.Tag is TokenColors token ? token : TokenColors.White;
+        var pigment=color switch {TokenColors.Yellow=>"#F3CC2C",TokenColors.Orange=>"#F69B35",TokenColors.Red=>"#EC4545",_=>"#F3EFE5"};
+        var ink=new SolidColorBrush((Color)ColorConverter.ConvertFromString(pigment));
+        face.Fill=new SolidColorBrush(Color.FromRgb(8,9,13));
+        face.Stroke=ink;
+        ((Ellipse)chip.Children[2]).Stroke=ink;
+        ((Path)chip.Children[3]).Fill=face.Stroke;
+        chip.Opacity=1;
     }
 
     /// <summary>Centre les contours réels du chiffre, y compris ceux du 1 et des valeurs à deux chiffres.</summary>
@@ -177,7 +182,7 @@ internal static class TableVisuals
     /// <summary>Construit une place avec nom, deux cartes, jeton et état de confirmation.</summary>
     public static Border Seat(PlayerSnapshot player, bool isSelf, bool isHost,
         bool isNextToReveal, GamePhase phase, TokenColors roundColor,
-        Action<FrameworkElement, int>? onTokenCreated = null, int shownCardCount = 2,
+        Action<FrameworkElement, int>? onTokenCreated = null, int shownCardCount = int.MaxValue,
         Action<FrameworkElement, int>? onCardCreated = null)
     {
         var frame = new Border
@@ -215,9 +220,10 @@ internal static class TableVisuals
         }
         content.Children.Add(identity);
         var cardRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-        for (var index = 0; index < 2; index++)
+        for (var index = 0; index < player.HandCount; index++)
         {
-            var card = Card(player.Hand.Count > index ? player.Hand[index] : null, 46, 66);
+            var width = player.HandCount >= 3 ? 34 : 46;
+            var card = Card(player.Hand.Count > index ? player.Hand[index] : null, width, width*66/46);
             card.Opacity = index < shownCardCount ? 1 : 0;
             cardRow.Children.Add(card);
             onCardCreated?.Invoke(card, index);
@@ -230,7 +236,7 @@ internal static class TableVisuals
         }
         content.Children.Add(cardRow);
         // La petite plaque reprend les tons du plateau ; les points gardent l'historique des quatre tours.
-        var handVisible = !isSelf && player.Hand.Count == 2;
+        var handVisible = !isSelf && player.Hand.Count >= 2;
         var showingHands = phase is GamePhase.Showdown or GamePhase.HeistComplete or GamePhase.Finished;
         var handRevealed = showingHands && (handVisible || phase is GamePhase.HeistComplete or GamePhase.Finished);
         var statusText = isNextToReveal ? "À RÉVÉLER" : showingHands

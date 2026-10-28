@@ -51,6 +51,10 @@ public class Player
         _hand.Add(card);
     }
 
+    internal void ReplaceHand(IEnumerable<ICard> cards) { _hand.Clear(); _hand.AddRange(cards); }
+    internal void DiscardCard(int index) => _hand.RemoveAt(index);
+    internal void ForgetSignals() => _signals.Clear();
+
     /// <summary>
     /// Prépare le joueur pour un nouveau braquage, sans conserver les anciens jetons.
     /// </summary>

@@ -117,6 +117,7 @@ public sealed class HostMigrationRenderingTests
                     RematchRenderingChecks.Run();
                     TutorialRenderingChecks.Run();
                     ReleaseNotesRenderingChecks.Run();
+                    SpecialCardsRenderingChecks.Run();
                 }
                 finally { application.Shutdown(); }
             }

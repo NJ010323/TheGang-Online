@@ -43,7 +43,7 @@ public partial class MainWindow
             .FirstOrDefault(signal => signal.Color == TokenColors.Red)?.Value ?? int.MaxValue;
         var players = game.Players.Where(player => revealed.ContainsKey(player.Id))
             .OrderByDescending(player => new HandScore(revealed[player.Id].Rank,
-                revealed[player.Id].Tiebreakers))
+                revealed[player.Id].Tiebreakers,revealed[player.Id].DominatesCategory))
             .ThenBy(RedToken)
             .Concat(game.Players.Where(player => !revealed.ContainsKey(player.Id))
                 .OrderBy(RedToken));
@@ -56,7 +56,7 @@ public partial class MainWindow
             revealed.TryGetValue(player.Id, out var result);
             if (result is not null)
             {
-                var score = new HandScore(result.Rank, result.Tiebreakers);
+                var score = new HandScore(result.Rank, result.Tiebreakers,result.DominatesCategory);
                 position++;
                 if (previousScore is null || score.CompareTo(previousScore) != 0)
                     place = position;
@@ -153,7 +153,7 @@ public partial class MainWindow
         var ranks = hand.Tiebreakers;
         var top = ranks.Count > 0 ? CardValue(ranks[0]) : string.Empty;
         var group = ranks.Count > 0 ? CardValue(ranks[0], plural: true) : string.Empty;
-        return hand.Rank switch
+        var label = hand.Rank switch
         {
             HandRank.RoyalFlush => "Quinte flush royale",
             HandRank.StraightFlush => $"Quinte flush · {top}",
@@ -166,6 +166,7 @@ public partial class MainWindow
             HandRank.OnePair => $"Paire de {group}",
             _ => $"Carte haute · {top}"
         };
+        return label+(hand.DominatesCategory?" · Gros bras":"");
     }
 
     /// <summary>Utilise les noms courts des figures pour garder chaque ligne sur une rangée.</summary>

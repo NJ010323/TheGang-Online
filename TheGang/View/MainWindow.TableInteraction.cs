@@ -115,6 +115,7 @@ public partial class MainWindow
                     Child = new GildedPlayerName { Text = drag.PlayerName, FontSize = 13 }
                 });
                 var chip = TableVisuals.Chip(drag.TokenValue, TableVisuals.RoundColor(game.Phase), 58);
+                if(game.Special?.LockedTokens.Contains(drag.TokenValue)==true)TableVisuals.DarkenChip(chip);
                 chip.HorizontalAlignment = HorizontalAlignment.Center;
                 visual.Children.Add(chip);
                 ChipFlightCanvas.Children.Add(visual);
@@ -170,6 +171,7 @@ public partial class MainWindow
             _lastDragSentAt = DateTimeOffset.UtcNow;
             chip.Opacity = 0.35;
             _dragVisual = TableVisuals.Chip(value, _dragColor, 62);
+            if(_lastSpecialGame?.Special?.LockedTokens.Contains(value)==true)TableVisuals.DarkenChip(_dragVisual);
             ChipFlightCanvas.Children.Add(_dragVisual);
             if (_selfSeat is not null)
             {
@@ -339,6 +341,7 @@ public partial class MainWindow
             _seatCenters.TryGetValue(action.ActorId, out var seat) ? seat : bank;
         if (from == to) return;
         var movingChip = TableVisuals.Chip(value, TableVisuals.RoundColor(action.Phase), 55);
+        if(_lastSpecialGame?.Special?.LockedTokens.Contains(value)==true)TableVisuals.DarkenChip(movingChip);
         ChipFlightCanvas.Children.Add(movingChip);
         Canvas.SetLeft(movingChip, from.X - 27);
         Canvas.SetTop(movingChip, from.Y - 27);

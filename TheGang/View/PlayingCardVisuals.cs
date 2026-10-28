@@ -81,8 +81,7 @@ internal static class PlayingCardVisuals
         if (turned) corner.RenderTransform = new RotateTransform(180, ArtWidth / 2, ArtHeight / 2);
         if (ornateIndices)
         {
-            // Les empattements et le contour gravé sont réservés aux grandes cartes décoratives.
-            // Les indices de la table conservent leur taille et leur contraste habituels.
+            // Le paquet doré partage ces indices gravés entre le menu et le plateau.
             Place(corner, EngravedIndex(rank, "Georgia", rank == "10" ? 21 : 27, 25, 25, ink), 2, 2);
             Place(corner, EngravedIndex(symbol, "Segoe UI Symbol", 18, 18, 18, ink), 5.5, 32);
             Place(corner, new Path

@@ -66,7 +66,7 @@ public static class PokerHandEvaluator
         var ranks = cards.Select(card => NormalizeRank(card.Rank)).OrderByDescending(rank => rank).ToList();
         var suits = cards.Select(card => card.Suit).ToList();
 
-        bool isFlush = suits.Distinct().Count() == 1;
+        bool isFlush = suits.All(suit => Enum.IsDefined(suit)) && suits.Distinct().Count() == 1;
         int? straightHigh = GetStraightHigh(ranks);
 
         var groupedRanks = ranks
@@ -74,6 +74,8 @@ public static class PokerHandEvaluator
             .OrderByDescending(group => group.Count())
             .ThenByDescending(group => group.Key)
             .ToList();
+        if (groupedRanks[0].Count() == 5)
+            return new HandScore(HandRank.FourOfKind, new[] { groupedRanks[0].Key, groupedRanks[0].Key });
 
         if (straightHigh.HasValue && isFlush)
         {

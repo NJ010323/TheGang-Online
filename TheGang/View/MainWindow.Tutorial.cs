@@ -9,20 +9,23 @@ namespace View;
 public partial class MainWindow
 {
     private TutorialSession? _tutorial;
+    private SpecialTutorialSession? _specialTutorial;
+    private Model.Game.Game? TutorialGame => _specialTutorial?.Game ?? _tutorial?.Game;
     private Guid _tutorialGameId;
     private readonly List<GameEventSnapshot> _tutorialEvents = [];
-    private Guid? TablePlayerId => _tutorial?.Game.Players[0].Id ?? _session?.Client.Identity?.PlayerId;
-    private bool IsTableHost => _tutorial is not null || _session?.IsHost == true;
+    private Guid? TablePlayerId => TutorialGame?.Players[0].Id ?? _session?.Client.Identity?.PlayerId;
+    private bool IsTableHost => TutorialGame is not null || _session?.IsHost == true;
 
     private void Tutorial_Click(object sender, RoutedEventArgs e)
     {
-        if (_session is null) StartTutorial();
+        if (_session is null) OpenTutorialMenu();
     }
 
     private void StartTutorial()
     {
         if (_draggedTokenValue is not null) EndChipDrag();
         _refreshTimer.Stop();
+        _specialTutorial=null;CloseSpecialInterface();
         _tutorial = new TutorialSession();
         _tutorialGameId = Guid.NewGuid();
         _tutorialEvents.Clear();
@@ -34,7 +37,7 @@ public partial class MainWindow
 
     private GameSnapshot TutorialSnapshot()
     {
-        var game = _tutorial!.Game;
+        var game = TutorialGame!;
         var revealed = game.RevealedHands.Select(h => h.PlayerId).ToHashSet();
         return new GameSnapshot(game.Phase, game.Result, game.HeistNumber, game.SuccessfulHeists,
             game.FailedHeists, game.LastHeistSucceeded,
@@ -42,19 +45,20 @@ public partial class MainWindow
             game.Players.Select((p, i) => new PlayerSnapshot(p.Id, p.Name,
                 i == 0 || revealed.Contains(p.Id) ? p.Hand.Select(c => new CardSnapshot(c.Suit, c.Rank)).ToArray() : [],
                 p.Signals.Select(s => new SignalSnapshot(s.Key, s.Value.Value)).ToArray(),
-                p.SignalToken?.Value, p.IsChoiceConfirmed)).ToArray(),
+                p.SignalToken?.Value, p.IsChoiceConfirmed){HandCount=p.Hand.Count}).ToArray(),
             game.AvailableTokens.Select(t => t.Value).ToArray(), game.AllPlayersHaveTokens, game.AllChoicesConfirmed,
-            game.NextPlayerToRevealId, _tutorialEvents.ToArray(), [])
+            game.NextPlayerToRevealId, _tutorialEvents.Where(e=>!game.HasEffraction(8)||e.Phase==game.Phase).ToArray(), [])
         {
             GameId = _tutorialGameId,
+            Special=_specialTutorial is null?null:HostedLobby.SpecialSnapshotFor(game,game.Players[0].Id),
             RevealedHands = game.RevealedHands.Select(h => new RevealedHandSnapshot(h.PlayerId, h.TokenValue,
-                h.Score.Rank, h.Score.Tiebreakers)).ToArray()
+                h.Score.Rank, h.Score.Tiebreakers){DominatesCategory=h.Score.DominatesCategory}).ToArray()
         };
     }
 
     private void MutateTutorial(Action action)
     {
-        var game = _tutorial!.Game;
+        var game = TutorialGame!;
         var phase = game.Phase;
         var tokens = game.Players.ToDictionary(p => p.Id, p => p.SignalToken?.Value);
         var confirmations = game.Players.ToDictionary(p => p.Id, p => p.IsChoiceConfirmed);
@@ -80,7 +84,7 @@ public partial class MainWindow
 
     private void AddTutorialEvent(GameEventKind kind, Guid? actor = null, int? token = null, Guid? from = null, string? fromName = null)
     {
-        var game = _tutorial!.Game;
+        var game = TutorialGame!;
         var player = game.Players.FirstOrDefault(p => p.Id == actor) ?? game.Players[0];
         _tutorialEvents.Add(new GameEventSnapshot(_tutorialEvents.Count + 1, kind, player.Id, player.Name,
             game.Phase, game.HeistNumber, token, from, fromName, game.LastHeistSucceeded));
@@ -88,6 +92,7 @@ public partial class MainWindow
 
     private void ApplyTutorialAction(GameAction action, int? value)
     {
+        if(_specialTutorial is not null){MutateTutorial(()=>_specialTutorial.Apply(new(action,value)));return;}
         var lesson = _tutorial!;
         MutateTutorial(() =>
         {
@@ -109,9 +114,12 @@ public partial class MainWindow
 
     private void RenderTutorial()
     {
+        if(_specialTutorial is not null){RenderSpecialTutorial();return;}
         if (_tutorial is not { } lesson) return;
         RenderGame(TutorialSnapshot());
         TutorialGuide.Visibility = TutorialBadge.Visibility = Visibility.Visible;
+        TutorialEffectsButton.Visibility=Visibility.Collapsed;
+        TutorialProgress.Maximum=16;
         TutorialProgress.Value = lesson.Step;
         TutorialStepText.Text = $"ÉTAPE {lesson.Step + 1:00} / 17 · À VOTRE RYTHME";
         TutorialTitle.Text = TutorialCopy.Titles[lesson.Step];
@@ -153,11 +161,16 @@ public partial class MainWindow
 
     private void TutorialContinue_Click(object sender, RoutedEventArgs e)
     {
+        if(_specialTutorial is not null){ContinueSpecialTutorial();return;}
         if (_tutorial?.Complete == true) { TutorialExit_Click(sender, e); return; }
         _ = RunAsync(() => { MutateTutorial(() => _tutorial!.Continue()); return Task.CompletedTask; }, false);
     }
 
-    private void TutorialRestart_Click(object sender, RoutedEventArgs e) => StartTutorial();
+    private void TutorialRestart_Click(object sender, RoutedEventArgs e)
+    {
+        if(_specialTutorial is {} special)StartSpecialTutorial(special.Difficulty,special.ExerciseCount==1?special.CardId:null);
+        else StartTutorial();
+    }
     private async void TutorialExit_Click(object sender, RoutedEventArgs e)
     {
         HistoryHideButton.IsEnabled = true;

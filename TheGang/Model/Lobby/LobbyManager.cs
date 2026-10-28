@@ -55,6 +55,8 @@ public sealed class LobbyManager
     /// <summary>Modifie la capacité d'un lobby ouvert à la demande de son hôte.</summary>
     public void ChangeLobbyCapacity(string code, Guid requesterId, int maxPlayers) =>
         GetLobby(code).ChangeCapacity(requesterId, maxPlayers);
+    public void ConfigureDifficulty(string code, Guid requester, Model.Game.GameDifficulty difficulty) => GetLobby(code).ConfigureDifficulty(requester,difficulty);
+    public void RestoreDifficulty(string code, Guid requester, Model.Game.DifficultyState state) => GetLobby(code).RestoreDifficulty(requester,state);
 
     /// <summary>Retire un invité du lobby avant le début de la partie.</summary>
     public void LeaveLobby(string code, Guid playerId) => GetLobby(code).Leave(playerId);

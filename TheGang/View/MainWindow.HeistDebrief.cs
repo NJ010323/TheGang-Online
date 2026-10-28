@@ -33,7 +33,7 @@ public partial class MainWindow
         }
 
         var scores = hands.ToDictionary(hand => hand.PlayerId,
-            hand => new HandScore(hand.Rank, hand.Tiebreakers));
+            hand => new HandScore(hand.Rank, hand.Tiebreakers,hand.DominatesCategory));
         var byStrength = hands.OrderByDescending(hand => scores[hand.PlayerId])
             .ThenBy(hand => hand.TokenValue).ToArray();
         var ranks = new Dictionary<Guid, int>();
@@ -65,7 +65,8 @@ public partial class MainWindow
             : $"Ordre rompu entre les jetons {breaks[0].LowerToken} et {breaks[0].HigherToken} : " +
               $"la main du jeton {breaks[0].LowerToken} est plus forte." +
               (breaks.Count > 1 ? $" {breaks.Count - 1} autre(s) écart(s)." : string.Empty);
-        OutcomeDebriefSummary.Foreground = breaks.Count == 0
+        if(game.Special?.FailureReason is {} reason) OutcomeDebriefSummary.Text=reason;
+        OutcomeDebriefSummary.Foreground = breaks.Count == 0 && game.Special?.FailureReason is null
             ? new SolidColorBrush(Color.FromRgb(231, 205, 151))
             : new SolidColorBrush(Color.FromRgb(255, 165, 146));
 

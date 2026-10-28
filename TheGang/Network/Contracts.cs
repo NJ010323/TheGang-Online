@@ -10,12 +10,14 @@ namespace Network;
 public sealed record JoinLobbyRequest(string Nickname, string InvitationSecret);
 /// <summary>Nouvelle taille demandée par l'hôte d'un lobby encore ouvert.</summary>
 public sealed record ChangeLobbyCapacityRequest(int MaxPlayers);
+public sealed record ChangeDifficultyRequest(GameDifficulty Difficulty);
 /// <summary>Identité secrète à conserver dans le seul client concerné.</summary>
 public sealed record LobbyIdentity(string Code, Guid PlayerId, string SessionToken, LobbySnapshot Lobby);
 /// <summary>Vue publique du lobby, sans accès au moteur de jeu.</summary>
 public sealed record LobbySnapshot(string Code, Guid HostId, int MaxPlayers, LobbyStatus Status,
     IReadOnlyList<LobbyParticipant> Players)
 {
+    public GameDifficulty Difficulty { get; init; }
     /// <summary>Invités temporairement absents ; leur place reste réservée jusqu'à cette échéance.</summary>
     public IReadOnlyList<AbsentPlayerSnapshot> AbsentPlayers { get; init; } = [];
     /// <summary>Relève proposée au premier invité, ou adresse du nouvel hôte après son accord.</summary>
@@ -35,7 +37,8 @@ public sealed record HostMigrationSnapshot(Guid Id, HostMigrationStage Stage, Gu
     string SuccessorName, DateTimeOffset ExpiresAtUtc, string? Invitation,
     IReadOnlyList<string> ExpectedPlayers, int MaxPlayers, bool WasStarted,
     int HeistNumber, int SuccessfulHeists, int FailedHeists, int AcknowledgedPlayers,
-    int PlayersToRedirect);
+    int PlayersToRedirect)
+{ public DifficultyState? DifficultyState { get; init; } }
 /// <summary>Réponse du successeur à la proposition de relève.</summary>
 public sealed record HostMigrationDecision(Guid Id, bool Accepted);
 /// <summary>Invitation publiée seulement par le successeur qui a accepté la relève.</summary>
@@ -44,17 +47,20 @@ public sealed record HostMigrationDestination(Guid Id, string Invitation);
 public sealed record HostMigrationReference(Guid Id);
 /// <summary>Joueurs attendus et résultats déjà acquis, installés sur le nouveau serveur.</summary>
 public sealed record HostMigrationSetup(IReadOnlyList<string> ExpectedPlayers, bool WasStarted,
-    int HeistNumber, int SuccessfulHeists, int FailedHeists, string? ReturningHostName);
+    int HeistNumber, int SuccessfulHeists, int FailedHeists, string? ReturningHostName)
+{ public DifficultyState? DifficultyState { get; init; } }
 /// <summary>Carte transportée sous une forme sérialisable, sans interface métier.</summary>
 public sealed record CardSnapshot(CardColors Suit, int Rank);
 /// <summary>Jeton d'un joueur pendant le braquage actuel.</summary>
 public sealed record SignalSnapshot(TokenColors Color, int Value);
 /// <summary>Vue d'un joueur ; seules ses propres cartes ou des cartes dévoilées sont présentes.</summary>
 public sealed record PlayerSnapshot(Guid Id, string Name, IReadOnlyList<CardSnapshot> Hand,
-    IReadOnlyList<SignalSnapshot> Signals, int? CurrentToken, bool IsChoiceConfirmed);
+    IReadOnlyList<SignalSnapshot> Signals, int? CurrentToken, bool IsChoiceConfirmed)
+{ public int HandCount { get; init; } = 2; }
 /// <summary>Meilleure combinaison d'un joueur dont la main est déjà publique.</summary>
 public sealed record RevealedHandSnapshot(Guid PlayerId, int TokenValue, HandRank Rank,
-    IReadOnlyList<int> Tiebreakers);
+    IReadOnlyList<int> Tiebreakers)
+{ public bool DominatesCategory { get; init; } }
 /// <summary>Type d'action publique à afficher et animer sur tous les clients.</summary>
 public enum GameEventKind
 {
@@ -83,6 +89,8 @@ public sealed record GameSnapshot(GamePhase Phase, GameResult Result, int HeistN
     Guid? NextPlayerToRevealId, IReadOnlyList<GameEventSnapshot> RecentEvents,
     IReadOnlyList<GameDragSnapshot> ActiveDrags)
 {
+    public IReadOnlyList<ChatMessageSnapshot> ChatMessages { get; init; } = [];
+    public SpecialGameSnapshot? Special { get; init; }
     /// <summary>Mains dévoilées uniquement ; vide si un ancien hôte ne fournit pas encore ce champ.</summary>
     public IReadOnlyList<RevealedHandSnapshot> RevealedHands { get; init; } = [];
     public Guid GameId { get; init; }
@@ -93,8 +101,29 @@ public sealed record GameSnapshot(GamePhase Phase, GameResult Result, int HeistN
 public enum GameAction
 {
     TakeToken, ReturnToken, ConfirmChoice, WithdrawConfirmation,
-    AdvanceRound, RevealNextHand, ResolveHeist, StartNextHeist
+    AdvanceRound, RevealNextHand, ResolveHeist, StartNextHeist,
+    ChooseSpecialSetup, ProposeComplice, VoteComplice, DiscardSpecial, SubmitSpecialGuess
 }
 
 /// <summary>Commande de jeu ; le serveur déduit le joueur de son jeton de session.</summary>
-public sealed record GameActionRequest(GameAction Action, int? TokenValue = null, Guid? GestureId = null);
+public sealed record GameActionRequest(GameAction Action, int? TokenValue = null, Guid? GestureId = null)
+{
+    public Guid ExpectedGameId { get; init; }
+    public int ExpectedHeist { get; init; }
+    public Guid? TargetId { get; init; }
+    public Guid? RecipientId { get; init; }
+    public int CardIndex { get; init; }
+    public int Rank { get; init; }
+    public string? GuessKind { get; init; }
+    public Guid? ProposalId { get; init; }
+    public bool Accepted { get; init; }
+}
+public sealed record CompliceVoteSnapshot(Guid Id,Guid Target,Guid? Recipient,int Rank,Guid[] Accepted);
+public sealed record SpecialGameSnapshot(GameDifficulty Difficulty, string[] ActiveCards, string? Permanent,
+    bool CompliceUsed, string? SetupKind, bool SetupChosen, Guid? DiscardPlayer, int ForbiddenDiscard,
+    string[] PublicHints, string[] PrivateHints, CompliceVoteSnapshot? Proposal, Guid? GuessTarget,
+    Dictionary<string,int> OwnGuesses, Dictionary<string,int> GuessVoteCounts, int[] LockedTokens, int AlarmLimit)
+{ public string? FailureReason { get; init; } }
+
+public sealed record ChatPostRequest(string Text);
+public sealed record ChatMessageSnapshot(long Sequence, Guid PlayerId, string PlayerName, string Text, DateTimeOffset SentAtUtc);

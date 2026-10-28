@@ -82,12 +82,16 @@ public sealed class LobbyHttpServer : IAsyncDisposable
             Respond(() => lobby.ChangeCapacity(code, SessionToken(request), change.MaxPlayers)));
         app.MapGet("/lobbies/{code}/session", (string code, HttpRequest request) =>
             Respond(() => lobby.Resume(code, SessionToken(request))));
+        app.MapPost("/lobbies/{code}/difficulty", (string code, HttpRequest request, ChangeDifficultyRequest change) =>
+            Respond(() => lobby.ChangeDifficulty(code,SessionToken(request),change.Difficulty)));
         app.MapPost("/lobbies/{code}/leave", (string code, HttpRequest request) =>
             Respond(() => { lobby.Leave(code, SessionToken(request)); return true; }));
         app.MapPost("/lobbies/{code}/start", (string code, HttpRequest request) =>
             Respond(() => lobby.Start(code, SessionToken(request))));
         app.MapGet("/lobbies/{code}/game", (string code, HttpRequest request) =>
             Respond(() => lobby.GetGame(code, SessionToken(request))));
+        app.MapPost("/lobbies/{code}/game/chat", (string code, HttpRequest request, ChatPostRequest message) =>
+            Respond(() => lobby.PostChat(code, SessionToken(request), message)));
         app.MapPost("/lobbies/{code}/game/actions", (string code, HttpRequest request,
             GameActionRequest action) =>
             Respond(() => lobby.Apply(code, SessionToken(request), action)));

@@ -38,11 +38,12 @@ public partial class MainWindow
         _dealFlightVisuals.Add(deck);
 
         var remaining = 0;
-        for (var pass = 0; pass < 2; pass++)
+        for (var pass = 0; pass < game.Players.Max(p=>p.HandCount); pass++)
         {
             for (var index = 0; index < game.Players.Count; index++)
             {
                 var player = game.Players[index];
+                if (pass >= player.HandCount) continue;
                 if (!_seatCenters.TryGetValue(player.Id, out var seatCenter)) continue;
                 remaining++;
                 var card = TableVisuals.Card(player.Id == selfId && player.Hand.Count > pass

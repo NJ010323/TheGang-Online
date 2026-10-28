@@ -35,12 +35,12 @@ public partial class MainWindow
         MenuCardsCanvas.Children.Add(glow);
 
         // Deux dos reprennent le motif noir et or d'origine, derrière les faces du paquet.
-        AddMenuCard(GildMenuCard(new Image
+        AddMenuCard(GildedCardVisuals.GildMenuCard(new Image
         {
             Source = new BitmapImage(new Uri("pack://application:,,,/TheGang;component/Assets/card-back.png")),
             Stretch = Stretch.Fill
         }, back: true), 65, 165, -32, 0);
-        AddMenuCard(GildMenuCard(new Image
+        AddMenuCard(GildedCardVisuals.GildMenuCard(new Image
         {
             Source = new BitmapImage(new Uri("pack://application:,,,/TheGang;component/Assets/card-back.png")),
             Stretch = Stretch.Fill
@@ -58,19 +58,8 @@ public partial class MainWindow
         for (var index = 0; index < positions.Length; index++)
         {
             var card = deck[index];
-            var face = PlayingCardVisuals.Face(card, 193, 298, ornateIndices: true, ornateSymbols: true);
-            face.Margin = new Thickness(0);
-            // La dorure concerne uniquement les cartes du menu ; celles de la table gardent leur rendu.
-            if (face is Border border)
-            {
-                border.BorderBrush = MenuGold();
-                border.BorderThickness = new Thickness(1.3);
-                border.CornerRadius = new CornerRadius(7);
-                border.Effect = null;
-                if (border.Child is Viewbox { Child: Canvas artwork })
-                    artwork.Background = new LinearGradientBrush(Color.FromRgb(255, 252, 242), Color.FromRgb(239, 225, 195), 120);
-            }
-            var ornament = GildMenuCard(face, back: false);
+            var ornament = GildedCardVisuals.Create(card, 205, 310);
+            ornament.Margin = new Thickness(0);
             var rank = card.Rank switch { 1 => "As", 11 => "Valet", 12 => "Dame", 13 => "Roi", _ => card.Rank.ToString() };
             var suit = card.Suit switch
             {
@@ -82,49 +71,6 @@ public partial class MainWindow
             AddMenuCard(ornament, left, top, angle, layer);
         }
     }
-
-    /// <summary>Ajoute une tranche métallique, un filet lumineux et des gravures aux quatre coins.</summary>
-    private static FrameworkElement GildMenuCard(FrameworkElement artwork, bool back)
-    {
-        var card = new Grid { Width = 205, Height = 310 };
-        card.Children.Add(new Border
-        {
-            CornerRadius = new CornerRadius(12), Background = MenuGold(),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(255, 229, 166)), BorderThickness = new Thickness(1),
-            Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 22, ShadowDepth = 9, Opacity = 0.48 }
-        });
-        card.Children.Add(new Border
-        {
-            Margin = new Thickness(5), Padding = new Thickness(1), CornerRadius = new CornerRadius(8),
-            Background = back ? new SolidColorBrush(Color.FromRgb(24, 19, 16)) : Brushes.OldLace,
-            BorderBrush = new SolidColorBrush(Color.FromRgb(104, 67, 20)), BorderThickness = new Thickness(0.8),
-            Child = artwork
-        });
-        // Ces gravures restent sur le cadre et ne recouvrent pas les indices des cartes.
-        card.Children.Add(new Path
-        {
-            Data = Geometry.Parse("M 3,22 L 3,9 Q 3,3 9,3 L 22,3 M 183,3 L 196,3 Q 202,3 202,9 L 202,22 " +
-                                  "M 202,288 L 202,301 Q 202,307 196,307 L 183,307 M 22,307 L 9,307 Q 3,307 3,301 L 3,288"),
-            Stroke = new SolidColorBrush(Color.FromRgb(255, 238, 190)), StrokeThickness = 1,
-            IsHitTestVisible = false
-        });
-        return card;
-    }
-
-    /// <summary>Un reflet diagonal donne du relief aux tranches dorées, sans texture supplémentaire.</summary>
-    private static LinearGradientBrush MenuGold() => new()
-    {
-        StartPoint = new Point(0, 0), EndPoint = new Point(1, 1),
-        GradientStops =
-        [
-            new GradientStop(Color.FromRgb(126, 80, 24), 0),
-            new GradientStop(Color.FromRgb(245, 209, 130), 0.18),
-            new GradientStop(Color.FromRgb(179, 122, 38), 0.42),
-            new GradientStop(Color.FromRgb(255, 236, 180), 0.6),
-            new GradientStop(Color.FromRgb(143, 91, 25), 0.82),
-            new GradientStop(Color.FromRgb(231, 188, 96), 1)
-        ]
-    };
 
     /// <summary>Place les cartes dans l'éventail ; la carte centrale reste toujours au premier plan.</summary>
     private void AddMenuCard(FrameworkElement card, double left, double top, double angle, int layer)

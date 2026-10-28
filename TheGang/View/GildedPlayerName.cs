@@ -30,8 +30,6 @@ public sealed class GildedPlayerName : FrameworkElement
     public GildedPlayerName()
     {
         Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 3, ShadowDepth = 1, Opacity = 0.55 };
-        // Le pseudo complet reste disponible même si la place impose une ellipse visuelle.
-        SetBinding(ToolTipProperty, new Binding(nameof(Text)) { Source = this });
     }
 
     private FormattedText Format(double width)

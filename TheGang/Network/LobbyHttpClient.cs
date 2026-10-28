@@ -77,6 +77,8 @@ public sealed class LobbyHttpClient : IDisposable
         CancellationToken cancellationToken = default) =>
         PostAsync<LobbySnapshot>($"lobbies/{Code}/capacity", cancellationToken,
             new ChangeLobbyCapacityRequest(maxPlayers));
+    public Task<LobbySnapshot> ChangeDifficultyAsync(Model.Game.GameDifficulty difficulty, CancellationToken cancellationToken=default) =>
+        PostAsync<LobbySnapshot>($"lobbies/{Code}/difficulty",cancellationToken,new ChangeDifficultyRequest(difficulty));
 
     /// <summary>L'hôte lance la partie après l'arrivée de trois joueurs ou plus.</summary>
     public async Task<GameSnapshot> StartAsync(CancellationToken cancellationToken = default) =>
@@ -87,6 +89,9 @@ public sealed class LobbyHttpClient : IDisposable
         await GetAsync<GameSnapshot>($"lobbies/{Code}/game", cancellationToken);
 
     /// <summary>Transmet une commande ; le serveur déduit son auteur de la session.</summary>
+    public Task<GameSnapshot> SendChatAsync(string text, CancellationToken cancellationToken=default) =>
+        PostAsync<GameSnapshot>($"lobbies/{Code}/game/chat", cancellationToken, new ChatPostRequest(text));
+
     public async Task<GameSnapshot> ApplyAsync(GameActionRequest action,
         CancellationToken cancellationToken = default) =>
         await PostAsync<GameSnapshot>($"lobbies/{Code}/game/actions", cancellationToken, action);

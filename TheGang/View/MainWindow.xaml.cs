@@ -53,6 +53,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        System.Windows.Controls.ToolTipService.SetIsEnabled(this, false);
+        ToolTipOpening += (_, e) => e.Handled = true;
+        foreach (var scroll in new[] { TutorialHintScroll, TutorialGuideScroll, InlineEffectsScroll, ChatScroll })
+            scroll.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] = ReleaseNotesOverlay.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)];
         _gloveCursor = GameCursor.Create();
         _refreshTimer.Tick += RefreshTimer_Tick;
         _noticeTimer.Tick += (_, _) => HideNotice();
@@ -130,7 +134,7 @@ public partial class MainWindow : Window
         AnimationsOffOption.IsChecked = !TableVisuals.AnimationsEnabled;
         GameSettingsSection.Visibility = GamePanel.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;
-        ExitGameHint.Text = _tutorial is not null ? "Vous pouvez quitter l’entraînement et revenir au menu à tout moment."
+        ExitGameHint.Text = TutorialGame is not null ? "Vous pouvez quitter l’entraînement et revenir au menu à tout moment."
             : _session?.IsHost == true
             ? "En quittant, proposez au premier invité de reprendre la table."
             : "Votre place sera gardée pendant deux minutes. Les autres joueurs attendront votre retour.";
@@ -161,6 +165,10 @@ public partial class MainWindow : Window
     /// <summary>F11 active le plein écran ; Échap en sort.</summary>
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && _specialOverlay?.Visibility == Visibility.Visible && ExitConfirmationOverlay.Visibility != Visibility.Visible)
+        {
+            CloseSpecialInterface(); e.Handled=true; return;
+        }
         if (e.Key == Key.Escape && ExitConfirmationOverlay.Visibility == Visibility.Visible)
         {
             DismissExitConfirmation();
@@ -358,7 +366,7 @@ public partial class MainWindow : Window
     /// <summary>L'hôte ferme la partie ; un invité garde sa place pendant le délai de reprise.</summary>
     private void ExitGame_Click(object sender, RoutedEventArgs e)
     {
-        if (_tutorial is not null) TutorialExit_Click(sender, e);
+        if (TutorialGame is not null) TutorialExit_Click(sender, e);
         else ShowExitConfirmation(ExitIntent.Game);
     }
 
@@ -381,6 +389,8 @@ public partial class MainWindow : Window
     /// <summary>Présente à tous la capacité actuelle ; seul l'hôte peut la modifier avant la partie.</summary>
     private void RenderLobbySummary(DesktopLobbySession session, LobbySnapshot lobby)
     {
+        LobbyDifficultyButton.Content = "Difficulté · " + DifficultyRules.Name(lobby.Difficulty) + " · Cartes spéciales";
+        LobbyDifficultyHint.Text = DifficultyRules.Description(lobby.Difficulty);
         LobbyDetails.Text = lobby.ExpectedTransferredPlayers is { } expected
             ? $"Relève · {lobby.Players.Count}/{expected} réunis · {lobby.MaxPlayers} places · code {lobby.Code}"
             : $"Code local : {lobby.Code}   ·   {lobby.Players.Count}/{lobby.MaxPlayers} joueurs";
@@ -506,7 +516,7 @@ public partial class MainWindow : Window
     {
         var selfId = TablePlayerId;
         if (selfId is null) return;
-        var hostId = _tutorial?.Game.Players[0].Id ?? _session!.Client.Identity!.Lobby.HostId;
+        var hostId = TutorialGame?.Players[0].Id ?? _session!.Client.Identity!.Lobby.HostId;
         if (game.GameId != _lastGameId)
         {
             StopCardDeal();
@@ -538,9 +548,10 @@ public partial class MainWindow : Window
             _remoteDragVisuals.Clear();
         }
         // Préparer les emplacements cachés avant de construire les places du nouveau braquage.
-        if (newHeist && game.Phase == GamePhase.PreFlop && TableVisuals.AnimationsEnabled)
+        var openingDeal=game.Phase==GamePhase.PreFlop || game.Phase==GamePhase.Flop && game.Special?.ActiveCards.Contains("E01")==true;
+        if (newHeist && openingDeal && TableVisuals.AnimationsEnabled)
             PrepareCardDeal(game);
-        else if (_dealingHeistNumber != 0 && game.Phase != GamePhase.PreFlop)
+        else if (_dealingHeistNumber != 0 && !openingDeal)
             StopCardDeal();
 
         GamePhaseText.Text = PhaseLabel(game);
@@ -573,6 +584,7 @@ public partial class MainWindow : Window
         ProcessGameEvents(game);
         RenderScoreCards(game);
         RenderRematch(game);
+        RenderSpecialCards(game);
     }
 
     /// <summary>Conserve les cartes déjà rendues et retourne seulement les nouvelles, dans l'ordre.</summary>
@@ -626,16 +638,16 @@ public partial class MainWindow : Window
                     _visibleTokenSources[value] = chip;
                     EnableChipDrag(chip, value, player.Id, game.Phase, !game.AllChoicesConfirmed &&
                         game.Players.First(candidate => candidate.Id == selfId).CurrentToken is null);
-                }, _dealtCardCounts.GetValueOrDefault(player.Id, 2),
+                }, _dealtCardCounts.GetValueOrDefault(player.Id, player.HandCount),
                 (card, index) => _seatCardVisuals[(player.Id, index)] = card);
             Canvas.SetLeft(seat, position.X);
             Canvas.SetTop(seat, position.Y);
             SeatsCanvas.Children.Add(seat);
             _seatCenters[player.Id] = new Point(position.X + seat.Width / 2, position.Y + seat.Height / 2);
             if (isSelf) _selfSeat = seat;
-            if (player.Hand.Count == 2 && !wasVisible && !isSelf)
+            if (player.Hand.Count >= 2 && !wasVisible && !isSelf)
                 TableVisuals.Reveal(seat);
-            if (player.Hand.Count == 2) _visibleHands.Add(player.Id);
+            if (player.Hand.Count >= 2) _visibleHands.Add(player.Id);
         }
     }
 
@@ -816,7 +828,7 @@ public partial class MainWindow : Window
     /// <summary>Transmet une commande à l'hôte puis affiche le nouvel état autorisé.</summary>
     private async Task ApplyAsync(GameAction action, int? tokenValue = null, Guid? gestureId = null)
     {
-        if (_tutorial is not null)
+        if (TutorialGame is not null)
         {
             try { ApplyTutorialAction(action, tokenValue); }
             catch { RenderTutorial(); throw; }
@@ -893,9 +905,12 @@ public partial class MainWindow : Window
     /// <summary>Nettoie les informations de la partie et réaffiche l'accueil.</summary>
     private async Task ReturnToMenuAsync(string message, bool preserveGuestResume = false)
     {
-        if (_tutorial is not null)
+        CloseSpecialInterface(); _lastSpecialGame=null;
+        SpecialCardsPanel.Visibility=GameDifficultyButton.Visibility=Visibility.Collapsed;
+        if (TutorialGame is not null)
         {
             _tutorial = null;
+            _specialTutorial = null;
             TutorialGuide.Visibility = TutorialBadge.Visibility = Visibility.Collapsed;
             HistoryHideButton.IsEnabled = true;
             preserveGuestResume = true;

@@ -100,7 +100,8 @@ public sealed partial class HostedLobby
                 successor.Id, successor.Name, _clock.GetUtcNow().AddMinutes(2), null,
                 _lobby.Players.Skip(1).Select(player => player.Name).ToArray(), _lobby.MaxPlayers,
                 _game is not null, heistNumber, _game?.SuccessfulHeists ?? 0,
-                _game?.FailedHeists ?? 0, 0, _lobby.Players.Count);
+                _game?.FailedHeists ?? 0, 0, _lobby.Players.Count)
+                { DifficultyState = _lobby.DifficultyState };
             CompleteAllGestures();
             return _migration;
         }
@@ -198,6 +199,9 @@ public sealed partial class HostedLobby
                     setup.ReturningHostName, StringComparer.OrdinalIgnoreCase))
                 throw new ArgumentException("Données de relève invalides.", nameof(setup));
             _migrationSetup = setup with { ExpectedPlayers = setup.ExpectedPlayers.ToArray() };
+            if (setup.DifficultyState is not null)
+                _manager.RestoreDifficulty(Code,_lobby.HostId,setup.DifficultyState with
+                { ResumeActive=setup.WasStarted && setup.ExpectedPlayers.Count>=3 && setup.DifficultyState.ResumeActive });
             // Une relève à moins de trois prépare un salon ouvert, jamais une partie à deux.
             // Les nouveaux invités pourront entrer une fois les joueurs transférés arrivés.
             if (setup.WasStarted && setup.ExpectedPlayers.Count < 3)
@@ -411,6 +415,15 @@ public sealed partial class HostedLobby
             var game = _game ?? throw new InvalidOperationException("La partie n'a pas commencé.");
             switch (request.Action)
             {
+                case GameAction.ChooseSpecialSetup:
+                case GameAction.ProposeComplice:
+                case GameAction.VoteComplice:
+                case GameAction.DiscardSpecial:
+                case GameAction.SubmitSpecialGuess:
+                    if (request.ExpectedGameId != _gameId || request.ExpectedHeist != game.HeistNumber)
+                        throw new InvalidOperationException("Cette action spéciale appartient à un ancien braquage.");
+                    ApplySpecialRequest(game,playerId,request);
+                    break;
                 case GameAction.TakeToken:
                     var value = request.TokenValue ?? throw new ArgumentException("Valeur de jeton manquante.");
                     var previousOwner = game.Players.FirstOrDefault(player => player.SignalToken?.Value == value);
@@ -611,6 +624,7 @@ public sealed partial class HostedLobby
     private LobbySnapshot Snapshot() =>
         new(Code, _lobby.HostId, _lobby.MaxPlayers, _lobby.Status, _lobby.Players)
         {
+            Difficulty = _lobby.Difficulty,
             GameReturnReason = _gameReturnReason,
             AbsentPlayers = _absentUntil.Select(entry => new AbsentPlayerSnapshot(entry.Key,
                 _lobby.Players.First(player => player.Id == entry.Key).Name, entry.Value)).ToArray(),
@@ -650,22 +664,24 @@ public sealed partial class HostedLobby
                     ?? Array.Empty<ICard>();
             return new PlayerSnapshot(player.Id, player.Name, cards.Select(CardSnapshotFor).ToArray(),
                 player.Signals.Select(signal => new SignalSnapshot(signal.Key, signal.Value.Value)).ToArray(),
-                player.SignalToken?.Value, player.IsChoiceConfirmed);
+                player.SignalToken?.Value, player.IsChoiceConfirmed) { HandCount = player.Hand.Count };
         }).ToArray();
         return new GameSnapshot(game.Phase, game.Result, game.HeistNumber,
             game.SuccessfulHeists, game.FailedHeists, game.LastHeistSucceeded,
             game.CommunityCards.Select(CardSnapshotFor).ToArray(), players,
             game.AvailableTokens.Select(token => token.Value).ToArray(),
             game.AllPlayersHaveTokens, game.AllChoicesConfirmed, game.NextPlayerToRevealId,
-            _events.ToArray(), _activeDrags.Values
+            _events.Where(e=>!game.HasEffraction(8) || e.Phase==game.Phase).ToArray(), _activeDrags.Values
                 .Where(active => DateTimeOffset.UtcNow - active.Updated < TimeSpan.FromSeconds(4))
                 .Select(active => active.Drag).ToArray())
         {
+            ChatMessages = _chatMessages.ToArray(),
+            Special = SpecialSnapshotFor(game,viewerId),
             GameId = _gameId,
             Rematch = _rematch is null ? null : _rematch with
             { ServerNowUtc = _clock.GetUtcNow(), AcceptedPlayers = _rematchAccepted.ToArray() },
             RevealedHands = game.RevealedHands.Select(hand => new RevealedHandSnapshot(hand.PlayerId,
-                hand.TokenValue, hand.Score.Rank, hand.Score.Tiebreakers.ToArray())).ToArray()
+                hand.TokenValue, hand.Score.Rank, hand.Score.Tiebreakers.ToArray()) { DominatesCategory=hand.Score.DominatesCategory }).ToArray()
         };
     }
 

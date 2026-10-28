@@ -8,7 +8,7 @@ using Model.Players;
 namespace Model.Game;
 
 /// <summary>Gère une partie du jeu de base, composée de plusieurs braquages.</summary>
-public class Game
+public partial class Game
 {
     // État conservé pendant toute la partie : les joueurs ne changent pas après le départ.
     private readonly List<Player> _players = new();
@@ -26,6 +26,7 @@ public class Game
     /// <summary>Crée une partie ; une source aléatoire peut être fournie pour rejouer des tests.</summary>
     public Game(Random? random = null)
     {
+        _specialRandom = random ?? Random.Shared;
         _deck = new Deck.Deck(random);
     }
 
@@ -115,7 +116,7 @@ public class Game
         EnsurePhase(GamePhase.WaitingForPlayers);
         if (_players.Count is < 3 or > 6)
             throw new InvalidOperationException("Il faut au moins trois joueurs pour reprendre une partie transférée.");
-        if (successfulHeists is < 0 or > 2 || failedHeists is < 0 or > 2 ||
+        if (successfulHeists is < 0 or > 2 || failedHeists < 0 || failedHeists >= AlarmLimit ||
             heistNumber != successfulHeists + failedHeists + 1)
             throw new ArgumentException("Progression de braquage transférée invalide.");
 
@@ -156,6 +157,9 @@ public class Game
             throw new InvalidOperationException("Vous possédez déjà un jeton. Attendez qu’un autre joueur vous le prenne.");
 
         var previousOwner = _players.FirstOrDefault(candidate => candidate.SignalToken == token);
+        EnsureSpecialSetupComplete();
+        if (previousOwner is not null && IsTokenLocked(value))
+            throw new InvalidOperationException("Ce jeton est sur sa face sombre : il ne peut plus changer de propriétaire.");
         previousOwner?.ClearSignalToken();
         player.ClearSignalToken();
         player.AssignSignalToken(token);
@@ -174,6 +178,7 @@ public class Game
     public void ConfirmChoice(Guid playerId)
     {
         EnsureSignalRound();
+        if (Proposal is not null) throw new InvalidOperationException("Terminez ou annulez le vote Complice avant de confirmer les jetons.");
         var player = FindPlayer(playerId);
         if (player.SignalToken is null)
             throw new InvalidOperationException("Le joueur doit choisir un jeton avant de confirmer.");
@@ -196,6 +201,7 @@ public class Game
         EnsurePhase(GamePhase.PreFlop);
         EnsureAllChoicesConfirmed();
         DealCommunityCards(3);
+        ApplyFlopEffects();
         BeginSignalRound(GamePhase.Flop, 2, TokenColors.Yellow);
     }
 
@@ -206,6 +212,11 @@ public class Game
         EnsureAllChoicesConfirmed();
         DealCommunityCards(1);
         BeginSignalRound(GamePhase.Turn, 3, TokenColors.Orange);
+        if (HasEffraction(5))
+        {
+            DealCommunityCards(1);
+            BeginSignalRound(GamePhase.River, 4, TokenColors.Red);
+        }
     }
 
     /// <summary>Dévoile la cinquième carte commune après accord unanime.</summary>
@@ -236,12 +247,13 @@ public class Game
             throw new InvalidOperationException("Toutes les mains ont déjà été dévoilées.");
 
         var player = _showdownOrder[_revealedHands.Count];
+        EnsureGuessesBeforeReveal(player.Id);
         var hand = new RevealedHand(
             player.Id,
             player.Name,
             player.SignalToken!.Value,
             Array.AsReadOnly(player.Hand.ToArray()),
-            PokerHandEvaluator.Evaluate(player.Hand, _communityCards));
+            EvaluatePlayer(player.Id));
         _revealedHands.Add(hand);
         return hand;
     }
@@ -252,7 +264,7 @@ public class Game
         EnsurePhase(GamePhase.Showdown);
         EnsureAllHandsRevealed();
         return _players
-            .OrderByDescending(player => PokerHandEvaluator.Evaluate(player.Hand, _communityCards))
+            .OrderByDescending(player => EvaluatePlayer(player.Id))
             .ToList();
     }
 
@@ -262,7 +274,7 @@ public class Game
         EnsurePhase(GamePhase.Showdown);
         EnsureAllHandsRevealed();
         HandScore? previousScore = null;
-        var succeeded = true;
+        var succeeded = SpecialGuessesSucceeded();
 
         foreach (var hand in _revealedHands)
         {
@@ -277,7 +289,7 @@ public class Game
         else
             FailedHeists++;
 
-        if (SuccessfulHeists == 3 || FailedHeists == 3)
+        if (SuccessfulHeists == 3 || FailedHeists == AlarmLimit)
         {
             Result = succeeded ? GameResult.Won : GameResult.Lost;
             Phase = GamePhase.Finished;
@@ -308,6 +320,7 @@ public class Game
     private void StartHeist()
     {
         HeistNumber++;
+        PrepareSpecialCards();
         _deck.Reset();
         _deck.Shuffle();
         _communityCards.Clear();
@@ -323,11 +336,13 @@ public class Game
         }
 
         BeginSignalRound(GamePhase.PreFlop, 1, TokenColors.White);
+        ApplyInitialSpecialEffects();
     }
 
     /// <summary>Prépare la nouvelle couleur de jetons sans effacer l'historique des tours précédents.</summary>
     private void BeginSignalRound(GamePhase phase, int round, TokenColors color)
     {
+        if (HasEffraction(8)) foreach (var player in _players) player.ForgetSignals();
         foreach (var player in _players)
             player.BeginSignalRound();
 
@@ -351,6 +366,7 @@ public class Game
     /// <summary>Empêche une révélation tant qu'une attribution ou une confirmation manque.</summary>
     private void EnsureAllChoicesConfirmed()
     {
+        EnsureSpecialSetupComplete();
         if (!AllChoicesConfirmed)
             throw new InvalidOperationException("Tous les joueurs doivent choisir et confirmer leur jeton avant la révélation.");
     }

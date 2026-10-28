@@ -32,6 +32,16 @@ public sealed class Lobby
 
     /// <summary>Identifiant du joueur qui peut lancer ou fermer le lobby.</summary>
     public Guid HostId { get; }
+    public Model.Game.GameDifficulty Difficulty => _game.Difficulty;
+    public Model.Game.DifficultyState DifficultyState => _game.ExportDifficulty();
+    internal void ConfigureDifficulty(Guid requester, Model.Game.GameDifficulty difficulty)
+    {
+        lock (_sync) { EnsureOpen(); EnsureHost(requester); _game.ConfigureDifficulty(difficulty); }
+    }
+    internal void RestoreDifficulty(Guid requester, Model.Game.DifficultyState state)
+    {
+        lock (_sync) { EnsureOpen(); EnsureHost(requester); _game.RestoreDifficulty(state); }
+    }
 
     /// <summary>Nombre maximal de joueurs, hôte compris.</summary>
     public int MaxPlayers

@@ -10,11 +10,13 @@ public sealed class HandScore : IComparable<HandScore>
 
     /// <summary>Valeurs comparées dans l'ordre pour départager deux mains de même famille.</summary>
     public IReadOnlyList<int> Tiebreakers { get; }
+    public bool DominatesCategory { get; }
 
     /// <summary>Crée un score immuable à partir d'une catégorie et de ses départages.</summary>
-    public HandScore(HandRank rank, IReadOnlyList<int> tiebreakers)
+    public HandScore(HandRank rank, IReadOnlyList<int> tiebreakers, bool dominatesCategory = false)
     {
         Rank = rank;
+        DominatesCategory = dominatesCategory;
         Tiebreakers = Array.AsReadOnly(tiebreakers.ToArray());
     }
 
@@ -31,6 +33,8 @@ public sealed class HandScore : IComparable<HandScore>
         {
             return rankComparison;
         }
+
+        if (DominatesCategory != other.DominatesCategory) return DominatesCategory ? 1 : -1;
 
         int length = Math.Min(Tiebreakers.Count, other.Tiebreakers.Count);
         for (int i = 0; i < length; i++)

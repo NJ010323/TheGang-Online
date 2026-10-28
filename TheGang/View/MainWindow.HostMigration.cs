@@ -91,7 +91,7 @@ public partial class MainWindow
                     migration.MaxPlayers);
                 await successor.Client.ConfigureHostMigrationAsync(new HostMigrationSetup(expected,
                     migration.WasStarted, migration.HeistNumber, migration.SuccessfulHeists,
-                    migration.FailedHeists, null));
+                    migration.FailedHeists, null) { DifficultyState=migration.DifficultyState });
                 await oldSession.Client.PublishHostMigrationAsync(
                     new HostMigrationDestination(migration.Id, successor.Invitation));
                 try { await oldSession.Client.AcknowledgeHostMigrationAsync(migration.Id); }

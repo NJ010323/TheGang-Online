@@ -15,12 +15,13 @@ public partial class MainWindow
     /// <summary>Synchronise les six cartes avec le score autoritaire, sans rejouer les retournements.</summary>
     private void RenderScoreCards(GameSnapshot game)
     {
-        if (GoldResultCardsPanel.Children.Count != 3 || AlarmResultCardsPanel.Children.Count != 3 ||
+        var alarmLimit=game.Special?.AlarmLimit??3;
+        if (GoldResultCardsPanel.Children.Count != 3 || AlarmResultCardsPanel.Children.Count != alarmLimit ||
             game.SuccessfulHeists < _shownGoldCards || game.FailedHeists < _shownAlarmCards)
-            ResetScoreCards();
+            ResetScoreCards(alarmLimit);
 
         _targetGoldCards = Math.Clamp(game.SuccessfulHeists, 0, 3);
-        _targetAlarmCards = Math.Clamp(game.FailedHeists, 0, 3);
+        _targetAlarmCards = Math.Clamp(game.FailedHeists, 0, alarmLimit);
 
         // Le débrief recouvre le tapis : retourner les cartes après sa fermeture.
         if (HeistOutcomeOverlay.Visibility == Visibility.Collapsed) FlipPendingScoreCards();
@@ -40,14 +41,14 @@ public partial class MainWindow
     }
 
     /// <summary>Remet les six cartes face cachée pour une nouvelle partie.</summary>
-    private void ResetScoreCards()
+    private void ResetScoreCards(int alarmLimit=3)
     {
         GoldResultCardsPanel.Children.Clear();
         AlarmResultCardsPanel.Children.Clear();
         for (var index = 0; index < 3; index++)
         {
             GoldResultCardsPanel.Children.Add(ResultCardVisuals.Slot(gold: true));
-            AlarmResultCardsPanel.Children.Add(ResultCardVisuals.Slot(gold: false));
+            if(index<alarmLimit) AlarmResultCardsPanel.Children.Add(ResultCardVisuals.Slot(gold: false));
         }
         _shownGoldCards = _shownAlarmCards = _targetGoldCards = _targetAlarmCards = 0;
     }
