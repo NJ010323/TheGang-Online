@@ -589,7 +589,8 @@ public partial class MainWindow : Window
                 (chip, value) =>
                 {
                     _visibleTokenSources[value] = chip;
-                    EnableChipDrag(chip, value, player.Id, game.Phase, !game.AllChoicesConfirmed);
+                    EnableChipDrag(chip, value, player.Id, game.Phase, !game.AllChoicesConfirmed &&
+                        game.Players.First(candidate => candidate.Id == selfId).CurrentToken is null);
                 }, _dealtCardCounts.GetValueOrDefault(player.Id, 2),
                 (card, index) => _seatCardVisuals[(player.Id, index)] = card);
             Canvas.SetLeft(seat, position.X);
@@ -684,7 +685,6 @@ public partial class MainWindow : Window
             GamePhase.Finished => "PARTIE TERMINÉE",
             _ => string.Empty
         };
-        ReturnTokenButton.IsEnabled = choosing && self.CurrentToken.HasValue && !game.AllChoicesConfirmed;
         ConfirmButton.IsEnabled = choosing && game.AllPlayersHaveTokens && !self.IsChoiceConfirmed;
         UpdateConfirmCue(ConfirmButton.IsEnabled);
         WithdrawButton.IsEnabled = choosing && self.IsChoiceConfirmed;
@@ -785,8 +785,6 @@ public partial class MainWindow : Window
         if (_session == session) RenderGame(game);
     }
 
-    private async void ReturnToken_Click(object sender, RoutedEventArgs e) =>
-        await RunAsync(() => ApplyAsync(GameAction.ReturnToken), showProgress: false);
     private async void Confirm_Click(object sender, RoutedEventArgs e)
     {
         UpdateConfirmCue(false);

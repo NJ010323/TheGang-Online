@@ -41,38 +41,35 @@ public class GameTests
     }
 
     [Fact]
-    public void TokenCanBeTakenFromAnotherPlayerAndReturned()
+    public void TokenCannotBeReturnedOrReplacedButCanBeStolenByPlayerWithoutToken()
     {
         var game = CreateGame();
         game.StartGame();
         var first = game.Players[0];
         var second = game.Players[1];
-
         game.TakeToken(first.Id, 2);
+        Assert.Throws<InvalidOperationException>(() => game.ReturnToken(first.Id));
+        Assert.Throws<InvalidOperationException>(() => game.TakeToken(first.Id, 1));
+        Assert.Equal(2, first.SignalToken!.Value);
         game.TakeToken(second.Id, 2);
-
         Assert.Null(first.SignalToken);
         Assert.False(first.Signals.ContainsKey(TokenColors.White));
         Assert.Equal(2, second.SignalToken!.Value);
+        Assert.Throws<InvalidOperationException>(() => game.ReturnToken(second.Id));
         Assert.Equal(new[] { 1, 3 }, game.AvailableTokens.Select(token => token.Value));
-
-        game.ReturnToken(second.Id);
-        Assert.Null(second.SignalToken);
-        Assert.Equal(3, game.AvailableTokens.Count);
         Assert.Throws<ArgumentOutOfRangeException>(() => game.TakeToken(first.Id, 4));
         Assert.Throws<ArgumentException>(() => game.TakeToken(Guid.NewGuid(), 1));
-
-        AssignTokensOnly(game);
-        game.TakeToken(first.Id, 2);
-        Assert.Null(second.SignalToken);
-        Assert.False(game.AllChoicesConfirmed);
-        AssignTokensOnly(game);
-        ConfirmAll(game);
+        game.TakeToken(first.Id, 1);
+        game.TakeToken(game.Players[2].Id, 3);
+        game.ConfirmChoice(first.Id);
         Assert.Throws<InvalidOperationException>(() => game.ReturnToken(first.Id));
         Assert.Throws<InvalidOperationException>(() => game.TakeToken(first.Id, 2));
+        Assert.True(first.IsChoiceConfirmed);
+        Assert.True(game.AllPlayersHaveTokens);
+        ConfirmAll(game);
+        Assert.True(game.AllChoicesConfirmed);
         game.WithdrawConfirmation(first.Id);
-        game.TakeToken(first.Id, 2);
-        Assert.False(game.AllChoicesConfirmed);
+        Assert.Throws<InvalidOperationException>(() => game.TakeToken(first.Id, 2));
     }
 
     [Fact]
@@ -92,10 +89,9 @@ public class GameTests
         Assert.True(game.AllPlayersHaveTokens);
         Assert.Throws<InvalidOperationException>(game.RevealFlop);
         game.ConfirmChoice(game.Players[0].Id);
-        game.TakeToken(game.Players[1].Id, 3);
-        Assert.False(game.AllPlayersHaveTokens);
-        Assert.All(game.Players, player => Assert.False(player.IsChoiceConfirmed));
-        AssignTokensOnly(game);
+        Assert.Throws<InvalidOperationException>(() => game.TakeToken(game.Players[1].Id, 3));
+        Assert.True(game.AllPlayersHaveTokens);
+        Assert.True(game.Players[0].IsChoiceConfirmed);
         ConfirmAll(game);
         Assert.True(game.AllChoicesConfirmed);
         game.RevealFlop();

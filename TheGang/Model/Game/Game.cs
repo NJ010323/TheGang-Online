@@ -152,6 +152,9 @@ public class Game
         if (player.SignalToken == token)
             return;
 
+        if (player.SignalToken is not null)
+            throw new InvalidOperationException("Vous possédez déjà un jeton. Attendez qu’un autre joueur vous le prenne.");
+
         var previousOwner = _players.FirstOrDefault(candidate => candidate.SignalToken == token);
         previousOwner?.ClearSignalToken();
         player.ClearSignalToken();
@@ -159,16 +162,12 @@ public class Game
         ResetConfirmations();
     }
 
-    /// <summary>Rend le jeton du tour courant au centre et invalide les confirmations.</summary>
+    /// <summary>Refuse le retour au centre, y compris pour les anciens clients réseau.</summary>
     public void ReturnToken(Guid playerId)
     {
         EnsureSignalRoundOpen();
-        var player = FindPlayer(playerId);
-        if (player.SignalToken is null)
-            return;
-
-        player.ClearSignalToken();
-        ResetConfirmations();
+        FindPlayer(playerId);
+        throw new InvalidOperationException("Un jeton pris ne peut plus être rendu au centre.");
     }
 
     /// <summary>Valide le choix actuel du joueur après attribution d'un jeton à chacun.</summary>
@@ -184,7 +183,7 @@ public class Game
         player.ConfirmChoice();
     }
 
-    /// <summary>Retire une confirmation pour autoriser de nouveaux échanges de jetons.</summary>
+    /// <summary>Retire une confirmation pour suspendre le passage au tour suivant.</summary>
     public void WithdrawConfirmation(Guid playerId)
     {
         EnsureSignalRound();

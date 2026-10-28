@@ -135,9 +135,8 @@
             </Setter>
         </Style>
         <!-- Trois arcs de 120° : une seule roue avec des cibles qui épousent chaque secteur. -->
-        <PathGeometry x:Key="ConfirmWheelSector" Figures="M 21.7,59 A 102,102 0 0 1 198.3,59 L 147.2,88.5 A 43,43 0 0 0 72.8,88.5 Z" />
-        <PathGeometry x:Key="ReturnWheelSector" Figures="M 110,212 A 102,102 0 0 1 21.7,59 L 72.8,88.5 A 43,43 0 0 0 110,153 Z" />
-        <PathGeometry x:Key="WithdrawWheelSector" Figures="M 198.3,59 A 102,102 0 0 1 110,212 L 110,153 A 43,43 0 0 0 147.2,88.5 Z" />
+        <PathGeometry x:Key="ConfirmWheelSector" Figures="M 8,110 A 102,102 0 0 1 212,110 L 153,110 A 43,43 0 0 0 67,110 Z" />
+        <PathGeometry x:Key="WithdrawWheelSector" Figures="M 212,110 A 102,102 0 0 1 8,110 L 67,110 A 43,43 0 0 0 153,110 Z" />
         <Style x:Key="TokenWheelSectorButton" TargetType="Button">
             <Setter Property="Width" Value="220" />
             <Setter Property="Height" Value="220" />
@@ -606,7 +605,7 @@
                                             AutomationProperties.Name="Revoir le débrief du dernier braquage" />
                                 </StackPanel>
                             </Border>
-                            <!-- Une roue radiale : chaque action possède son propre tiers cliquable. -->
+                            <!-- Une roue radiale : confirmation et retrait occupent chacun une moitié. -->
                             <Grid x:Name="TokenActionWheel" Width="220" Height="220" Visibility="Collapsed"
                                   Canvas.Left="300" Canvas.Top="480" Panel.ZIndex="3">
                                 <Ellipse Width="214" Height="214" Fill="#E71A1418" Stroke="#D6A95F"
@@ -629,27 +628,13 @@
                                         </StackPanel>
                                     </Canvas>
                                 </Button>
-                                <Button x:Name="ReturnTokenButton" Style="{StaticResource TokenWheelSectorButton}"
-                                        Tag="{StaticResource ReturnWheelSector}"
-                                        Clip="{StaticResource ReturnWheelSector}"
-                                        Click="ReturnToken_Click"
-                                        AutomationProperties.Name="Rendre mon jeton">
-                                    <Canvas Width="220" Height="220" IsHitTestVisible="False">
-                                        <StackPanel Canvas.Left="12" Canvas.Top="121" Width="83">
-                                            <TextBlock Text="↶" Foreground="#F5D188" FontSize="27"
-                                                       TextAlignment="Center" />
-                                            <TextBlock Text="RENDRE" Foreground="#FFF1D1" FontSize="12"
-                                                       FontWeight="Bold" TextAlignment="Center" />
-                                        </StackPanel>
-                                    </Canvas>
-                                </Button>
                                 <Button x:Name="WithdrawButton" Style="{StaticResource TokenWheelSectorButton}"
                                         Tag="{StaticResource WithdrawWheelSector}"
                                         Clip="{StaticResource WithdrawWheelSector}"
                                         Click="Withdraw_Click"
                                         AutomationProperties.Name="Retirer ma confirmation">
                                     <Canvas Width="220" Height="220" IsHitTestVisible="False">
-                                        <StackPanel Canvas.Left="125" Canvas.Top="121" Width="83">
+                                        <StackPanel Canvas.Left="68" Canvas.Top="143" Width="83">
                                             <TextBlock Text="×" Foreground="#F3AAA0" FontSize="29"
                                                        TextAlignment="Center" />
                                             <TextBlock Text="RETIRER" Foreground="#FFF1D1" FontSize="12"
@@ -1101,7 +1086,7 @@
                                     <StackPanel x:Name="RuleRoundsPanel" />
                                     <TextBlock Text="JETONS ET ACCORD" Foreground="#622C24" FontSize="17"
                                                FontWeight="Bold" Margin="0,6,0,5" />
-                                    <TextBlock Text="À chaque tour, prenez un jeton au centre : 1 pour la main supposée la plus faible, le plus grand pour la plus forte. Vous pouvez rendre ou reprendre un jeton."
+                                    <TextBlock Text="À chaque tour, prenez un jeton au centre : 1 pour la main supposée la plus faible, le plus grand pour la plus forte. Si vous n’avez pas de jeton, vous pouvez en prendre un au centre ou à un autre joueur. Un jeton pris ne peut plus être rendu ni remplacé."
                                                Foreground="#49352A" TextWrapping="Wrap" FontSize="15" />
                                     <TextBlock Text="Quand chacun a un jeton, confirmez. Tout échange annule l'accord ; l'hôte passe à la suite après la confirmation de tous."
                                                Foreground="#49352A" TextWrapping="Wrap" FontSize="15"

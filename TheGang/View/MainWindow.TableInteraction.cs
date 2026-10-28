@@ -20,7 +20,6 @@ public partial class MainWindow
     private readonly Dictionary<int, Point> _bankCenters = [];
     private readonly Dictionary<int, FrameworkElement> _visibleTokenSources = [];
     private Border? _selfSeat;
-    private Rect _bankDropArea;
     // Un seul jeton suit la souris ; l'attribution est envoyée à l'hôte au dépôt.
     private int? _draggedTokenValue;
     private Guid? _draggedFromPlayerId;
@@ -53,9 +52,8 @@ public partial class MainWindow
         const double trayHeight = 100;
         var trayWidth = (count - 1) * spacing + 110;
         var trayLeft = (1280 - trayWidth) / 2;
-        _bankDropArea = new Rect(trayLeft, trayTop, trayWidth, trayHeight);
 
-        // L'ovale discret indique où rendre un jeton, sans intercepter le glisser-déposer.
+        // L'ovale discret regroupe les jetons encore disponibles.
         var tray = new Border
         {
             Width = trayWidth,
@@ -85,7 +83,8 @@ public partial class MainWindow
             Canvas.SetTop(chip, centerY - chipSize / 2);
             TokenBankPanel.Children.Add(chip);
             _visibleTokenSources[value] = chip;
-            EnableChipDrag(chip, value, null, game.Phase, !game.AllChoicesConfirmed);
+            EnableChipDrag(chip, value, null, game.Phase, !game.AllChoicesConfirmed &&
+                game.Players.First(player => player.Id == _session!.Client.Identity!.PlayerId).CurrentToken is null);
             if (phaseChanged) TableVisuals.Reveal(chip);
         }
     }
@@ -208,7 +207,7 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>Le dépôt sur sa main prend le jeton ; le dépôt au centre rend son propre jeton.</summary>
+    /// <summary>Seul le dépôt sur sa main prend le jeton ; tout autre dépôt annule le geste.</summary>
     private async void Window_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (_draggedTokenValue is not { } value) return;
@@ -216,17 +215,14 @@ public partial class MainWindow
         var selfId = _session?.Client.Identity?.PlayerId;
         var onHand = _selfSeat is not null &&
             new Rect(535, 560, _selfSeat.Width, _selfSeat.Height).Contains(point);
-        var onBank = _bankDropArea.Contains(point);
         var fromPlayerId = _draggedFromPlayerId;
         var gestureId = _dragGestureId;
         var acceptedDrop = selfId is not null &&
-            (onHand && fromPlayerId != selfId || onBank && fromPlayerId == selfId);
+            onHand && fromPlayerId != selfId;
         EndChipDrag(keepSourceDimmed: acceptedDrop);
         e.Handled = true;
         if (onHand && selfId is not null && fromPlayerId != selfId)
             await RunAsync(() => ApplyAsync(GameAction.TakeToken, value, gestureId), showProgress: false);
-        else if (onBank && selfId is not null && fromPlayerId == selfId)
-            await RunAsync(() => ApplyAsync(GameAction.ReturnToken, gestureId: gestureId), showProgress: false);
     }
 
     /// <summary>Annule un glissement interrompu par un changement de fenêtre.</summary>

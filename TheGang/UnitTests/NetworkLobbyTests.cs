@@ -681,7 +681,7 @@ public class NetworkLobbyTests
     }
 
     [Fact]
-    public async Task TokenChangesResetConfirmationsAndGuestsCanLeave()
+    public async Task TokenReturnAndReplacementAreRejectedAndGuestsCanLeave()
     {
         await using var server = await LobbyHttpServer.StartAsync("Host", 3);
         using var host = new LobbyHttpClient(server.LocalAddress);
@@ -698,9 +698,13 @@ public class NetworkLobbyTests
         await bob.ApplyAsync(new GameActionRequest(GameAction.ConfirmChoice));
         await Assert.ThrowsAsync<HttpRequestException>(() =>
             host.ApplyAsync(new GameActionRequest(GameAction.AdvanceRound)));
-        var snapshot = await host.ApplyAsync(new GameActionRequest(GameAction.TakeToken, 2));
-        Assert.False(snapshot.AllPlayersHaveTokens);
-        Assert.All(snapshot.Players, player => Assert.False(player.IsChoiceConfirmed));
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            host.ApplyAsync(new GameActionRequest(GameAction.TakeToken, 2)));
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            bob.ApplyAsync(new GameActionRequest(GameAction.ReturnToken)));
+        var snapshot = await host.GetGameAsync();
+        Assert.True(snapshot.AllPlayersHaveTokens);
+        Assert.True(snapshot.Players.Single(player => player.Name == "Bob").IsChoiceConfirmed);
 
         await using var waitingServer = await LobbyHttpServer.StartAsync("NewHost", 3);
         using var guest = new LobbyHttpClient(waitingServer.LocalAddress);
