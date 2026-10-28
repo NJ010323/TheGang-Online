@@ -75,7 +75,8 @@ public partial class App : Application
             var panel = new Grid { Background = new SolidColorBrush(Color.FromArgb(215, 12, 9, 13)) };
             var updatePanel = new UpdateProgressPanel { HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center };
-            panel.Children.Add(updatePanel);
+            panel.Children.Add(new Viewbox { Child = updatePanel, Margin = new Thickness(24),
+                Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly });
             window.Content = null;
             var grid = new Grid(); grid.Children.Add(content); grid.Children.Add(panel); window.Content = grid;
             window.Closed += (_, _) => { _shutdown.Cancel(); Shutdown(); };

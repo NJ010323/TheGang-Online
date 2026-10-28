@@ -1,1 +1,19 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net8.0-windows</TargetFramework><UseWPF>true</UseWPF><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AssemblyName>TheGang.Updater</AssemblyName></PropertyGroup><ItemGroup><ProjectReference Include="../Updates/Updates.csproj" /></ItemGroup><ItemGroup><Compile Include="../Updates/UpdateProgressPanel.cs" Link="UpdateProgressPanel.cs" /></ItemGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>TheGang.Updater</AssemblyName>
+    <ApplicationIcon>../View/Assets/app-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Updates/Updates.csproj" />
+    <Compile Include="../Updates/UpdateProgressPanel.cs" Link="UpdateProgressPanel.cs" />
+    <Resource Include="../View/Assets/app-icon.ico" Link="Assets/app-icon.ico" />
+    <Resource Include="../View/Assets/logo-reference.png" Link="Assets/logo-reference.png" />
+    <Resource Include="../View/Assets/card-back.png" Link="Assets/card-back.png" />
+    <Resource Include="../View/Assets/table-felt.png" Link="Assets/table-felt.png" />
+  </ItemGroup>
+</Project>
