@@ -55,6 +55,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: windows-release
@@ -71,6 +72,12 @@ jobs:
             echo 'Configure a separate public DISTRIBUTION_REPOSITORY and DISTRIBUTION_TOKEN.' >&2
             exit 1
           fi
-          gh release create "$GITHUB_REF_NAME" --repo "$TARGET_REPO" --title "The Gang $GITHUB_REF_NAME" --notes "Version stable Windows x64. Joueurs : télécharger et ouvrir TheGang-Setup. Le ZIP sert aux mises à jour automatiques et à la distribution portable." --draft
+          notes_file="docs/releases/$GITHUB_REF_NAME.md"
+          if [[ -f "$notes_file" ]]; then
+            notes_args=(--notes-file "$notes_file")
+          else
+            notes_args=(--notes "Version stable Windows x64. Joueurs : télécharger et ouvrir TheGang-Setup. Le ZIP sert aux mises à jour automatiques et à la distribution portable.")
+          fi
+          gh release create "$GITHUB_REF_NAME" --repo "$TARGET_REPO" --title "The Gang $GITHUB_REF_NAME" "${notes_args[@]}" --draft
           gh release upload "$GITHUB_REF_NAME" TheGang-win-x64.zip TheGang-Setup-*-win-x64.exe --repo "$TARGET_REPO"
           gh release edit "$GITHUB_REF_NAME" --repo "$TARGET_REPO" --draft=false --latest
