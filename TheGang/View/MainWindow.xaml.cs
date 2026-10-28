@@ -64,6 +64,7 @@ public partial class MainWindow : Window
         PopulateRulesCard();
         PopulateMenuCards();
         RefreshResumeButton();
+        InitializeReleaseNotes();
         // Le menu de démarrage occupe tout l'écran ; le mode fenêtré reste accessible dans les paramètres.
         SetFullScreen(true);
     }
@@ -129,7 +130,8 @@ public partial class MainWindow : Window
         AnimationsOffOption.IsChecked = !TableVisuals.AnimationsEnabled;
         GameSettingsSection.Visibility = GamePanel.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;
-        ExitGameHint.Text = _session?.IsHost == true
+        ExitGameHint.Text = _tutorial is not null ? "Vous pouvez quitter l’entraînement et revenir au menu à tout moment."
+            : _session?.IsHost == true
             ? "En quittant, proposez au premier invité de reprendre la table."
             : "Votre place sera gardée pendant deux minutes. Les autres joueurs attendront votre retour.";
         SettingsOverlay.Visibility = Visibility.Visible;
@@ -162,6 +164,11 @@ public partial class MainWindow : Window
         if (e.Key == Key.Escape && ExitConfirmationOverlay.Visibility == Visibility.Visible)
         {
             DismissExitConfirmation();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && ReleaseNotesOverlay.Visibility == Visibility.Visible)
+        {
+            CloseReleaseNotes_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
         else if (e.Key == Key.F11)
@@ -349,7 +356,11 @@ public partial class MainWindow : Window
     private void Leave_Click(object sender, RoutedEventArgs e) => ShowExitConfirmation(ExitIntent.Lobby);
 
     /// <summary>L'hôte ferme la partie ; un invité garde sa place pendant le délai de reprise.</summary>
-    private void ExitGame_Click(object sender, RoutedEventArgs e) => ShowExitConfirmation(ExitIntent.Game);
+    private void ExitGame_Click(object sender, RoutedEventArgs e)
+    {
+        if (_tutorial is not null) TutorialExit_Click(sender, e);
+        else ShowExitConfirmation(ExitIntent.Game);
+    }
 
     /// <summary>Agrandit le tapis ou réaffiche le détail de tous les jetons.</summary>
     private void HistoryToggle_Click(object sender, RoutedEventArgs e) =>
@@ -493,7 +504,9 @@ public partial class MainWindow : Window
     /// <summary>Construit le plateau à partir de la projection réseau du joueur courant.</summary>
     private void RenderGame(GameSnapshot game)
     {
-        if (_session?.Client.Identity is not { } identity) return;
+        var selfId = TablePlayerId;
+        if (selfId is null) return;
+        var hostId = _tutorial?.Game.Players[0].Id ?? _session!.Client.Identity!.Lobby.HostId;
         if (game.GameId != _lastGameId)
         {
             StopCardDeal();
@@ -545,18 +558,18 @@ public partial class MainWindow : Window
 
         RenderCommunityCards(game);
         _visibleTokenSources.Clear();
-        RenderSeats(game, identity.PlayerId, identity.Lobby.HostId);
+        RenderSeats(game, selfId.Value, hostId);
         if (newHeist && _dealingHeistNumber == game.HeistNumber)
-            StartCardDeal(game, identity.PlayerId);
+            StartCardDeal(game, selfId.Value);
         RenderTokenBank(game, phaseChanged);
         if (_draggedTokenValue is { } draggedValue &&
             _visibleTokenSources.TryGetValue(draggedValue, out var movingSource))
             movingSource.Opacity = 0.25;
-        RenderRemoteDrags(game, identity.PlayerId);
+        RenderRemoteDrags(game, selfId.Value);
         RenderHistory(game);
         RenderShowdownResults(game);
         RenderActivity(game);
-        RenderControls(game, identity.PlayerId);
+        RenderControls(game, selfId.Value);
         ProcessGameEvents(game);
         RenderScoreCards(game);
         RenderRematch(game);
@@ -699,7 +712,7 @@ public partial class MainWindow : Window
             ? Visibility.Visible : Visibility.Collapsed;
         FooterPhaseHint.Visibility = choosing && !choicesComplete ? Visibility.Collapsed : Visibility.Visible;
         FooterPhaseHint.Text = choicesComplete
-            ? _session!.IsHost ? "CHOIX CONFIRMÉS · CONTINUEZ AVEC LA ROUE PRÈS DE VOTRE MAIN"
+            ? IsTableHost ? "CHOIX CONFIRMÉS · CONTINUEZ AVEC LA ROUE PRÈS DE VOTRE MAIN"
                 : "CHOIX CONFIRMÉS · L'HÔTE VA POURSUIVRE"
             : game.Phase switch
         {
@@ -735,7 +748,7 @@ public partial class MainWindow : Window
         ResolveButton.Visibility = game.Phase == GamePhase.Showdown && game.NextPlayerToRevealId is null
             ? Visibility.Visible : Visibility.Collapsed;
         NextHeistButton.Visibility = game.Phase == GamePhase.HeistComplete ? Visibility.Visible : Visibility.Collapsed;
-        var hostCanAct = _session!.IsHost && (AdvanceButton.Visibility == Visibility.Visible ||
+        var hostCanAct = IsTableHost && (AdvanceButton.Visibility == Visibility.Visible ||
             RevealButton.Visibility == Visibility.Visible || ResolveButton.Visibility == Visibility.Visible ||
             NextHeistButton.Visibility == Visibility.Visible);
         _hostActionAvailable = hostCanAct;
@@ -803,6 +816,12 @@ public partial class MainWindow : Window
     /// <summary>Transmet une commande à l'hôte puis affiche le nouvel état autorisé.</summary>
     private async Task ApplyAsync(GameAction action, int? tokenValue = null, Guid? gestureId = null)
     {
+        if (_tutorial is not null)
+        {
+            try { ApplyTutorialAction(action, tokenValue); }
+            catch { RenderTutorial(); throw; }
+            return;
+        }
         var session = _session!;
         var game = await session.Client.ApplyAsync(new GameActionRequest(action, tokenValue, gestureId));
         if (_session == session) RenderGame(game);
@@ -874,6 +893,14 @@ public partial class MainWindow : Window
     /// <summary>Nettoie les informations de la partie et réaffiche l'accueil.</summary>
     private async Task ReturnToMenuAsync(string message, bool preserveGuestResume = false)
     {
+        if (_tutorial is not null)
+        {
+            _tutorial = null;
+            TutorialGuide.Visibility = TutorialBadge.Visibility = Visibility.Collapsed;
+            HistoryHideButton.IsEnabled = true;
+            preserveGuestResume = true;
+            SetHistoryVisible(true);
+        }
         if (_draggedTokenValue is not null) EndChipDrag();
         StopCardDeal();
         HideHeistOutcome();

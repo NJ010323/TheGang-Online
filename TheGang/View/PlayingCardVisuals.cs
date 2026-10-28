@@ -32,6 +32,12 @@ internal static class PlayingCardVisuals
     };
     private static readonly Brush Skin = Brush("#F1CAA0");
 
+    static PlayingCardVisuals()
+    {
+        // Les ressources immuables sont partageables entre les fenêtres et les rendus STA.
+        foreach (var brush in new[] { Paper, Edge, Red, Black, Gold, MetallicGold, Skin }) brush.Freeze();
+    }
+
     /// <summary>Construit une carte complète ; seules les données de la carte déterminent la face.</summary>
     public static FrameworkElement Face(CardSnapshot card, double width, double height,
         bool ornateIndices = false, bool ornateSymbols = false)

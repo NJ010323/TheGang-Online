@@ -84,7 +84,7 @@ public partial class MainWindow
             TokenBankPanel.Children.Add(chip);
             _visibleTokenSources[value] = chip;
             EnableChipDrag(chip, value, null, game.Phase, !game.AllChoicesConfirmed &&
-                game.Players.First(player => player.Id == _session!.Client.Identity!.PlayerId).CurrentToken is null);
+                game.Players.First(player => player.Id == TablePlayerId).CurrentToken is null);
             if (phaseChanged) TableVisuals.Reveal(chip);
         }
     }
@@ -212,7 +212,7 @@ public partial class MainWindow
     {
         if (_draggedTokenValue is not { } value) return;
         var point = e.GetPosition(ChipFlightCanvas);
-        var selfId = _session?.Client.Identity?.PlayerId;
+        var selfId = TablePlayerId;
         var onHand = _selfSeat is not null &&
             new Rect(535, 560, _selfSeat.Width, _selfSeat.Height).Contains(point);
         var fromPlayerId = _draggedFromPlayerId;

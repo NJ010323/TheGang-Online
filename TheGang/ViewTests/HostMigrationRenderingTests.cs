@@ -115,6 +115,8 @@ public sealed class HostMigrationRenderingTests
                     Assert.Equal(12, nickname.ActualWidth);
                     Assert.Equal("Léo", peer.GetName());
                     RematchRenderingChecks.Run();
+                    TutorialRenderingChecks.Run();
+                    ReleaseNotesRenderingChecks.Run();
                 }
                 finally { application.Shutdown(); }
             }
@@ -122,7 +124,7 @@ public sealed class HostMigrationRenderingTests
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        Assert.True(thread.Join(TimeSpan.FromSeconds(20)), "Le test de rendu WPF n'a pas terminé.");
+        Assert.True(thread.Join(TimeSpan.FromSeconds(60)), "Le test de rendu WPF n'a pas terminé.");
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 }

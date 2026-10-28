@@ -45,6 +45,39 @@ La nouvelle partie démarre automatiquement dès que tous les joueurs ont accept
 
 Un refus, un départ volontaire ou l’expiration du délai ramène toute la table au même lobby ouvert. Les places des joueurs absents sont libérées à ce moment-là ; les joueurs présents peuvent inviter d’autres personnes ou laisser l’hôte lancer une nouvelle partie. Le vote et le délai sont gérés par le serveur, et une réponse périmée ne peut pas relancer ou annuler une autre partie.
 
+## Tutoriel jouable en solo
+
+Le menu propose **Tutoriel jouable · En solo** : une initiation hors ligne de 17 étapes,
+avec Mila et Noé, deux complices scénarisés. Le parcours utilise le véritable moteur
+pour jouer un braquage complet : prise au centre, reprise d'un jeton adverse,
+confirmations et retrait de confirmation, flop, turn, river et résolution des mains.
+Le tutoriel se déroule directement dans le plateau principal : mêmes cartes,
+jetons, glisser-déposer, roues de confirmation et de révélation, distribution,
+retournements et débrief animés que les parties en ligne. Un panneau de mentor
+dans la colonne de droite affiche la progression, les explications et le geste
+attendu. Les mauvais choix donnent un conseil sans pénalité. Les réglages
+d'animations habituels restent respectés.
+
+Le mentor indique explicitement les choix imposés et l'aide utilisant les mains
+cachées à la river ; ces aides sont réservées au tutoriel. Les cartes adverses
+restent masquées jusqu'à la révélation. Le dernier écran explique comment inviter
+des amis pour une vraie partie. Le parcours peut être quitté ou recommencé à tout
+moment et ne crée aucune session réseau, réservation de place ou donnée de reprise.
+Il s'agit d'un exercice guidé, pas d'un mode solo avec intelligence artificielle.
+
+## Notes de mise à jour dans le jeu
+
+Le cartouche en bas du menu principal met en avant la dernière version. **Notes de
+mise à jour** ouvre le journal : choisissez une version dans la liste, de la plus
+récente à la plus ancienne, pour lire les nouveautés, améliorations et corrections.
+Les listes et notes défilent, les flèches du clavier changent de version et Échap
+ferme le journal. L'historique reste disponible hors connexion.
+
+Les fichiers `docs/releases/vX.Y.Z.md` sont automatiquement embarqués dans le jeu
+et utilisés par GitHub Actions pour les releases : ajouter le fichier de notes
+avant de créer le tag de la nouvelle version. Il n'y a pas de second historique à
+maintenir dans le code de l'interface.
+
 ## Interface de jeu
 
 Le menu permet d'héberger, de rejoindre, de consulter les **Règles du jeu** ou de quitter. La carte de règles explique la mission, les quatre tours de jetons, les confirmations, la révélation, la victoire et les combinaisons de poker illustrées ; elle reste aussi accessible près de la main pendant une partie. Le panneau **Paramètres** propose le mode fenêtré ou plein écran ainsi que l'activation des animations du plateau. **F11** change aussi le mode d'affichage ; **Échap** ferme les paramètres ou quitte le plein écran. Une confirmation dans le style du jeu précède désormais le départ d'un lobby, l'abandon d'une partie ou la fermeture complète de l'application, y compris par la croix de la fenêtre ou Alt+F4. Elle précise si le lobby sera fermé pour tous ou si la place de l'invité restera réservée. L'hôte choisit la capacité du lobby avec les boutons 3 à 6 joueurs à la création et dans le salon, puis lance la partie quand au moins trois joueurs sont présents. Les confirmations et erreurs s'affichent dans un bandeau visible en haut de l'écran.
