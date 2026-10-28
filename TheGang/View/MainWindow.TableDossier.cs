@@ -13,12 +13,6 @@ public partial class MainWindow
     private void RenderTableDossier(GameSnapshot game)
     {
         var special=game.Special;
-        PrivateCardsPanel.Children.Clear();
-        foreach(var shown in special?.ShownCards??[])
-        {
-            var label=SpecialText("PRIVÉ · "+shown.SourceName,12);label.TextAlignment=TextAlignment.Center;PrivateCardsPanel.Children.Add(label);
-            PrivateCardsPanel.Children.Add(TableVisuals.Card(shown.Card,76,110));
-        }
         PositionTableChat();
         var cardsKey=$"{game.GameId}/{game.HeistNumber}/{string.Join(',',special?.ActiveCards??[])}/{special?.CompliceUsed}";
         if(cardsKey!=_activeCardsKey)

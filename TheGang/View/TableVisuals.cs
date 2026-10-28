@@ -183,7 +183,7 @@ internal static class TableVisuals
     public static Border Seat(PlayerSnapshot player, bool isSelf, bool isHost,
         bool isNextToReveal, GamePhase phase, TokenColors roundColor,
         Action<FrameworkElement, int>? onTokenCreated = null, int shownCardCount = int.MaxValue,
-        Action<FrameworkElement, int>? onCardCreated = null)
+        Action<FrameworkElement, int>? onCardCreated = null, IReadOnlyDictionary<int,CardSnapshot>? knownCards=null)
     {
         var frame = new Border
         {
@@ -223,7 +223,9 @@ internal static class TableVisuals
         for (var index = 0; index < player.HandCount; index++)
         {
             var width = player.HandCount >= 3 ? 34 : 46;
-            var card = Card(player.Hand.Count > index ? player.Hand[index] : null, width, width*66/46);
+            var known=knownCards?.GetValueOrDefault(index);
+            var card = Card(player.Hand.Count > index ? player.Hand[index] : known, width, width * 1.45);
+            if(known is not null)System.Windows.Automation.AutomationProperties.SetName(card,$"Carte montrée · {known.Rank} {known.Suit}");
             card.Opacity = index < shownCardCount ? 1 : 0;
             cardRow.Children.Add(card);
             onCardCreated?.Invoke(card, index);

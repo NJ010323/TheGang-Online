@@ -639,7 +639,8 @@ public partial class MainWindow : Window
                     EnableChipDrag(chip, value, player.Id, game.Phase, !game.AllChoicesConfirmed &&
                         game.Players.First(candidate => candidate.Id == selfId).CurrentToken is null);
                 }, _dealtCardCounts.GetValueOrDefault(player.Id, player.HandCount),
-                (card, index) => _seatCardVisuals[(player.Id, index)] = card);
+                (card, index) => _seatCardVisuals[(player.Id, index)] = card,
+                game.Special?.ShownCards.Where(c=>c.SourceId==player.Id&&c.CardIndex>=0).GroupBy(c=>c.CardIndex).ToDictionary(g=>g.Key,g=>g.Last().Card));
             Canvas.SetLeft(seat, position.X);
             Canvas.SetTop(seat, position.Y);
             SeatsCanvas.Children.Add(seat);

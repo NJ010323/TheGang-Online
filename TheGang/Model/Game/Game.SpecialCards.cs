@@ -40,6 +40,11 @@ public partial class Game
     public IReadOnlyList<string> PublicHints => _publicHints.ToArray();
     public string? SpecialFailureReason { get; private set; }
     public IReadOnlyList<string> PrivateHints(Guid viewer) => _privateHints.TryGetValue(viewer, out var hints) ? hints.ToArray() : [];
+    private void RememberCard(Guid viewer,Model.Players.Player owner,ICard card)
+    {
+        if(!_shownCards.TryGetValue(viewer,out var cards))_shownCards[viewer]=cards=[];
+        if(!cards.Any(c=>ReferenceEquals(c.Card,card)))cards.Add(new(owner.Id,owner.Name,card));
+    }
     public string? SetupKind { get; private set; }
     public bool SetupChosen(Guid viewer) => _setupChoices.ContainsKey(viewer);
     public Guid? GuessTarget => _showdownOrder.LastOrDefault()?.Id;
@@ -159,10 +164,12 @@ public partial class Game
             {
                 var p=_players[i]; var cards=p.Hand.ToArray(); cards[_setupChoices[p.Id]]=selected[(i+_players.Count-1)%_players.Count]; p.ReplaceHand(cards);
             }
+            for(var i=0;i<_players.Count;i++)RememberCard(_players[i].Id,_players[(i+1)%_players.Count],selected[i]);
             _publicHints.Add("Coordinateur : les cartes choisies sont passées simultanément au voisin de gauche.");
         }
         else
         {
+            _shownCards.Clear(); // Le mélange ne permet pas de connaître les nouveaux propriétaires.
             foreach(var p in _players) _privateHints[p.Id]=new(){"Votre ancienne main : "+string.Join(", ",p.Hand)};
             var cards=_players.SelectMany(p=>p.Hand).ToArray(); _specialRandom.Shuffle(cards); var offset=0;
             foreach(var p in _players) { var count=p.Hand.Count; p.ReplaceHand(cards.Skip(offset).Take(count)); offset+=count; }
@@ -212,7 +219,7 @@ public partial class Game
                 _publicHints.Add($"Conductrice — {p.Name} : {HandCategoryName(category)}."); break;
             case "C04":_publicHints.Add($"Cerveau de la bande — {p.Name} : {p.Hand.Count(c=>c.Rank==proposal.Rank)} carte(s) de rang {(proposal.Rank==1?"As":proposal.Rank.ToString())}.");break;
             case "C05":p.ReceiveCard(_deck.DealCard());_discardPlayer=p.Id;_forbiddenDiscard=-1;break;
-            case "C07":p.ReceiveCard(new UnsuitedJack());_discardPlayer=p.Id;_forbiddenDiscard=p.Hand.Count-1;break;
+            case "C07":p.ReceiveCard(new UnsuitedJack());foreach(var viewer in _players)RememberCard(viewer.Id,p,p.Hand.Last());_discardPlayer=p.Id;_forbiddenDiscard=p.Hand.Count-1;break;
             case "C10":_bigArmsPlayer=p.Id;_publicHints.Add($"Gros bras — {p.Name} gagne les comparaisons entre mains de la même catégorie.");break;
         }
         _compliceUsed=true; Proposal=null; ResetConfirmations();

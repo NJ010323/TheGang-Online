@@ -95,8 +95,13 @@ Elle ne transmet aucune main automatiquement. Les règles de communication reste
 applicables. Le chat n’est pas un journal persistant : il n’est pas transféré lors
 d’une relève d’hôte. Les tutoriels sont hors ligne et désactivent la radio.
 
-Une carte montrée par l’Informateur est transmise sous forme structurée uniquement
-à son destinataire et reste visible à gauche du tapis jusqu’au braquage suivant.
+Les cartes connues avec certitude apparaissent directement à leur emplacement
+chez leur propriétaire, uniquement pour les joueurs qui les connaissent : carte
+montrée par l’Informateur, carte passée par le Coordinateur, ou Valet sans couleur
+public. Une défausse met à jour cet emplacement ; une carte sortie de la main ne
+reste pas révélée. Le mélange de l’Arnaqueuse ne révèle pas les nouveaux
+propriétaires des cartes mémorisées. Les autres cartes restent cachées.
+
 Les décisions flottent au-dessus du plateau sans changer ses dimensions. Les
 pouvoirs facultatifs s’ouvrent à la demande ; les votes et décisions obligatoires
 ouvrent automatiquement le volet, qui peut toujours être réduit.

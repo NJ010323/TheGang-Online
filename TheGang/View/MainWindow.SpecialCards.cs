@@ -20,7 +20,7 @@ public partial class MainWindow
     private string _specialPrivateKey="";
     private static Brush SpecialBrush(string value) => new SolidColorBrush((Color)ColorConverter.ConvertFromString(value));
     private TextBlock SpecialText(string text,int size=15) => new(){Text=text,FontSize=size,TextWrapping=TextWrapping.Wrap,
-        FontFamily=new FontFamily(size>=23?"Georgia":"Segoe UI"),Foreground=SpecialBrush(size>=23?"#F0C86A":"#EAD8B8"),LineHeight=size*1.5,Margin=new Thickness(0,0,0,12)};
+        FontFamily=new FontFamily(size>=23?"Georgia":"Segoe UI"),Foreground=SpecialBrush("#F0C86A"),LineHeight=size*1.5,Margin=new Thickness(0,0,0,12)};
     private Button SpecialButton(string label,Action action,bool enabled=true)
     {
         var b=new Button {Content=new TextBlock {Text=label,TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center},Style=(Style)FindResource("TableButton"),Margin=new Thickness(0,4,10,8),Padding=new Thickness(12,8,12,8),IsEnabled=enabled};
@@ -135,8 +135,8 @@ public partial class MainWindow
     }
     private ComboBox SpecialChoice(IEnumerable<(string Label,object Value)> items)
     {
-        var box=new ComboBox{FontFamily=new FontFamily("Georgia"),Style=(Style)FindResource("HeistChoice"),Margin=new Thickness(0,0,10,12),MinHeight=36,MinWidth=180,FontSize=16,Background=SpecialBrush("#36252A"),Foreground=SpecialBrush("#EAD8B8"),BorderBrush=SpecialBrush("#D9AD60")};
-        foreach(var item in items)box.Items.Add(new ComboBoxItem{Content=item.Label,Tag=item.Value,Background=SpecialBrush("#36252A"),Foreground=SpecialBrush("#EAD8B8"),Padding=new Thickness(8)});box.SelectedIndex=0;return box;
+        var box=new ComboBox{FontFamily=new FontFamily("Georgia"),Style=(Style)FindResource("HeistChoice"),Margin=new Thickness(0,0,10,12),MinHeight=36,MinWidth=180,FontSize=16,Background=SpecialBrush("#36252A"),Foreground=SpecialBrush("#F0C86A"),BorderBrush=SpecialBrush("#D9AD60")};
+        foreach(var item in items)box.Items.Add(new ComboBoxItem{Style=(Style)FindResource("HeistChoiceItem"),Content=item.Label,Tag=item.Value,Background=SpecialBrush("#36252A"),Foreground=SpecialBrush("#F0C86A"),Padding=new Thickness(8)});box.SelectedIndex=0;return box;
     }
     private static object? Choice(ComboBox box)=>(box.SelectedItem as ComboBoxItem)?.Tag;
     private async void SendSpecial(GameActionRequest request)
@@ -205,8 +205,8 @@ public partial class MainWindow
             for(var i=0;i<self.Hand.Count;i++)
             {
                 var index=i;var button=SpecialButton("",()=>{});button.Content=TableVisuals.Card(self.Hand[i],52,75);
-                button.BorderThickness=new Thickness(i==0?3:1);
-                button.Click+=(_,_)=>{selectedCard=index;foreach(var other in buttons)other.Opacity=.55;button.Opacity=1;};
+                button.Style=(Style)FindResource("HeistCardChoice");button.Tag=i==0?"selected":null;
+                button.Click+=(_,_)=>{selectedCard=index;foreach(var other in buttons){other.Opacity=.65;other.Tag=null;}button.Opacity=1;button.Tag="selected";};
                 button.Opacity=i==0?1:.55;buttons.Add(button);cards.Children.Add(button);
             }
             body.Children.Add(cards);

@@ -16,13 +16,37 @@
             </ControlTemplate></Setter.Value></Setter>
         </Style>
 
+        <Style x:Key="HeistChoiceItem" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="#F0C86A"/><Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
+                <Border x:Name="ItemShell" Background="#281B20" BorderBrush="Transparent" BorderThickness="1" CornerRadius="5" Padding="{TemplateBinding Padding}" Margin="3,2">
+                    <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemShell" Property="Background" Value="#604621"/><Setter TargetName="ItemShell" Property="BorderBrush" Value="#E8BD66"/><Setter Property="Foreground" Value="#F0C86A"/></Trigger>
+                    <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemShell" Property="Background" Value="#72522B"/><Setter TargetName="ItemShell" Property="BorderBrush" Value="#FFE0A0"/><Setter Property="Foreground" Value="#F0C86A"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style x:Key="HeistCardChoice" TargetType="Button">
+            <Setter Property="Padding" Value="9"/><Setter Property="Margin" Value="0,3,10,8"/><Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderBrush" Value="#80613B"/><Setter Property="Background" Value="#302021"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+                <Border x:Name="Shell" BorderBrush="{TemplateBinding BorderBrush}" Background="{TemplateBinding Background}" BorderThickness="2" CornerRadius="9" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center"/></Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="Tag" Value="selected"><Setter TargetName="Shell" Property="BorderBrush" Value="#FFD77C"/><Setter TargetName="Shell" Property="Background" Value="#5C4124"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Shell" Property="BorderBrush" Value="#FFE6A8"/></Trigger>
+                    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Shell" Property="BorderBrush" Value="#FFE6A8"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
         <Style x:Key="HeistChoice" TargetType="ComboBox">
-            <Setter Property="Foreground" Value="#F8E1B1"/><Setter Property="Background" Value="#352328"/>
+            <Setter Property="Foreground" Value="#F0C86A"/><Setter Property="Background" Value="#352328"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
                 <Grid>
-                    <ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                    <ToggleButton Focusable="False" Foreground="{TemplateBinding Foreground}" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
                         <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="#352328" BorderBrush="#C49C55" BorderThickness="1" CornerRadius="6"><Grid><ContentPresenter Margin="10,7,35,7"/><Path Data="M0,0 L6,6 L12,0" Stroke="#F0C86A" StrokeThickness="2" Width="12" Height="7" HorizontalAlignment="Right" Margin="0,0,12,0"/></Grid></Border></ControlTemplate></ToggleButton.Template>
-                        <ContentPresenter Content="{TemplateBinding SelectionBoxItem}"/>
+                        <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" TextElement.Foreground="{TemplateBinding Foreground}"/>
                     </ToggleButton>
                     <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False">
                         <Border Background="#24181C" BorderBrush="#C49C55" BorderThickness="1" CornerRadius="6" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="240"><ScrollViewer VerticalScrollBarVisibility="Auto"><ItemsPresenter/></ScrollViewer></Border>
@@ -689,7 +713,6 @@
                             <Canvas x:Name="TokenBankPanel" Width="1280" Height="720" />
                             <Canvas x:Name="SeatsCanvas" Width="1280" Height="720" />
                             <StackPanel x:Name="TableActiveCards" Canvas.Left="18" Canvas.Top="18" Width="240" />
-                            <StackPanel x:Name="PrivateCardsPanel" Canvas.Left="18" Canvas.Top="180" Width="150" />
                             <!-- Les deux piles de trois cartes sont communes à tous les joueurs. -->
                             <Border Canvas.Left="22" Canvas.Top="532" Width="250"
                                     CornerRadius="10" Background="#CC171518" BorderBrush="#A27C48"
@@ -906,7 +929,7 @@
                             </StackPanel>
                         </Button>
                     </Grid>
-                    <Border x:Name="InlineEffectsFrame" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Top" Width="350" MaxHeight="340" Background="#F222171A" BorderBrush="#B58C4E" BorderThickness="1" CornerRadius="12" Padding="12" Margin="0,18,18,0" Panel.ZIndex="12">
+                    <Border x:Name="InlineEffectsFrame" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Top" Width="350" MaxHeight="340" Background="#F22D211A" BorderBrush="#D6AC5D" BorderThickness="1" CornerRadius="12" Padding="12" Margin="0,18,18,0" Panel.ZIndex="12">
                         <DockPanel>
                             <Button x:Name="EffectsToggleButton" DockPanel.Dock="Top" Content="EFFET DISPONIBLE" Style="{StaticResource TableButton}" FontFamily="Georgia" FontSize="12" MinHeight="34" Padding="6" Click="EffectsToggle_Click"/>
                             <ScrollViewer x:Name="InlineEffectsScroll" Margin="0,9,0,0" MaxHeight="270" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed"><StackPanel x:Name="InlineEffectsBody"/></ScrollViewer>

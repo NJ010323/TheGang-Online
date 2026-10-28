@@ -128,4 +128,5 @@ public sealed record SpecialGameSnapshot(GameDifficulty Difficulty, string[] Act
 public sealed record ChatPostRequest(string Text);
 public sealed record ChatMessageSnapshot(long Sequence, Guid PlayerId, string PlayerName, string Text, DateTimeOffset SentAtUtc);
 
-public sealed record ShownCardSnapshot(Guid SourceId,string SourceName,CardSnapshot Card);
+public sealed record ShownCardSnapshot(Guid SourceId,string SourceName,CardSnapshot Card)
+{ public int CardIndex { get; init; } = -1; }

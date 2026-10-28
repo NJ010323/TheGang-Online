@@ -162,7 +162,12 @@ public class DifficultyTests
         Assert.Throws<InvalidOperationException>(()=>g.DiscardSpecial(g.Players[1].Id,0));
         if(card=="C07")Assert.Throws<ArgumentOutOfRangeException>(()=>g.DiscardSpecial(p.Id,2));
         g.DiscardSpecial(p.Id,card=="C05"?2:0);Assert.Equal(2,p.Hand.Count);Assert.Null(g.DiscardPlayer);
-        if(card=="C07")Assert.Contains(p.Hand,c=>c.Rank==11&&!Enum.IsDefined(c.Suit));
+        if(card=="C07")
+        {
+            Assert.Contains(p.Hand,c=>c.Rank==11&&!Enum.IsDefined(c.Suit));
+            foreach(var viewer in g.Players)
+            {var known=Assert.Single(HostedLobby.SpecialSnapshotFor(g,viewer.Id).ShownCards);Assert.Equal(p.Id,known.SourceId);Assert.Equal(1,known.CardIndex);Assert.Equal(11,known.Card.Rank);}
+        }
     }
     [Fact] public void CoordinatorExchangesSimultaneouslyAndNeverTakesCardsFromDeck()
     {
@@ -170,6 +175,12 @@ public class DifficultyTests
         g.ChooseSetup(g.Players[0].Id,0);Assert.Equal(before[0],g.Players[0].Hand);Assert.Throws<InvalidOperationException>(()=>g.TakeToken(g.Players[0].Id,1));
         foreach(var p in g.Players.Skip(1))g.ChooseSetup(p.Id,0);
         for(var i=0;i<3;i++){Assert.Same(before[(i+2)%3][0],g.Players[i].Hand[0]);Assert.Same(before[i][1],g.Players[i].Hand[1]);}
+        for(var i=0;i<3;i++)
+        {
+            var known=Assert.Single(HostedLobby.SpecialSnapshotFor(g,g.Players[i].Id).ShownCards);
+            Assert.Equal(g.Players[(i+1)%3].Id,known.SourceId);Assert.Equal(0,known.CardIndex);
+            Assert.Equal(before[i][0].Rank,known.Card.Rank);Assert.Equal(before[i][0].Suit,known.Card.Suit);
+        }
         Assert.Null(g.SetupKind);
     }
     [Fact] public void SwindlerWaitsForEveryoneAndRedistributesOnlyOriginalCards()
@@ -241,7 +252,7 @@ public class DifficultyTests
         foreach(var p in new[]{c,d})lobby.Apply(lobby.Code,p.SessionToken,new(GameAction.VoteComplice){ExpectedGameId=game.GameId,ExpectedHeist=2,ProposalId=vote,Accepted=true});
         Assert.Single(lobby.GetGame(lobby.Code,c.SessionToken).Special!.PrivateHints);
         var shown=Assert.Single(lobby.GetGame(lobby.Code,c.SessionToken).Special!.ShownCards);
-        Assert.Equal(b.PlayerId,shown.SourceId);Assert.Equal(game.Players.Single(p=>p.Id==b.PlayerId).Hand[0],shown.Card);
+        Assert.Equal(0,shown.CardIndex);Assert.Equal(b.PlayerId,shown.SourceId);Assert.Equal(game.Players.Single(p=>p.Id==b.PlayerId).Hand[0],shown.Card);
         foreach(var other in new[]{b,d})Assert.Empty(lobby.GetGame(lobby.Code,other.SessionToken).Special!.ShownCards);
 
         foreach(var p in new[]{b,d})Assert.Empty(lobby.GetGame(lobby.Code,p.SessionToken).Special!.PrivateHints);

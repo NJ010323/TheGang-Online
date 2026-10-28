@@ -91,7 +91,10 @@ internal static class SpecialCardsRenderingChecks
             informant.Apply(new(GameAction.VoteComplice){ProposalId=informant.Game.Proposal!.Id,Accepted=true});
             Invoke("RenderTutorial");Capture(window,"private-shown-card");
             Assert.Equal(tableHeight,Find<Grid>("TableSurface").ActualHeight);
-            Assert.Equal(2,Find<StackPanel>("PrivateCardsPanel").Children.Count);
+            var known=HostedLobby.SpecialSnapshotFor(informant.Game,informant.Game.Players[0].Id).ShownCards.Single();
+            var visuals=(Dictionary<(Guid PlayerId,int CardIndex),FrameworkElement>)typeof(MainWindow).GetField("_seatCardVisuals",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(window)!;
+            Assert.Contains("Carte montrée",System.Windows.Automation.AutomationProperties.GetName(visuals[(known.SourceId,known.CardIndex)]));
+
             Invoke("StartSpecialTutorial",GameDifficulty.Advanced,"C01");
             Invoke("EffectsToggle_Click",window,new RoutedEventArgs());Capture(window,"compact-card-choice");
 
