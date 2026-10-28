@@ -64,7 +64,7 @@ public partial class MainWindow : Window
         _dragHeartbeatTimer.Tick += (_, _) => PublishDragPosition();
         OutcomeGoldImage.Source = ResultCardVisuals.GoldFace;
         OutcomeAlarmImage.Source = ResultCardVisuals.AlarmFace;
-        TableSurface.SizeChanged += (_, _) => PositionHostActions();
+        TableSurface.SizeChanged += (_, _) => { PositionHostActions(); PositionTableChat(); };
         PopulateRulesCard();
         PopulateMenuCards();
         RefreshResumeButton();
@@ -656,9 +656,9 @@ public partial class MainWindow : Window
     {
         HistoryRowsPanel.Children.Clear();
         var colors = new[] { TokenColors.White, TokenColors.Yellow, TokenColors.Orange, TokenColors.Red };
-        var header = new Grid { Margin = new Thickness(0, 0, 0, 8) };
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(95) });
-        foreach (var _ in colors) header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
+        var header = new Grid { Height=24, Margin = new Thickness(4, 0, 4, 8) };
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1,GridUnitType.Star) });
+        foreach (var _ in colors) header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(38) });
         for (var index = 0; index < colors.Length; index++)
         {
             var label = new TextBlock
@@ -675,9 +675,9 @@ public partial class MainWindow : Window
 
         foreach (var player in game.Players)
         {
-            var row = new Grid { Margin = new Thickness(0, 0, 0, 6) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(95) });
-            foreach (var _ in colors) row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
+            var row = new Grid { Height=40, ClipToBounds=true };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1,GridUnitType.Star) });
+            foreach (var _ in colors) row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(38) });
             row.Children.Add(new GildedPlayerName
             {
                 Text = player.Name, FontSize = 12,
@@ -695,6 +695,8 @@ public partial class MainWindow : Window
                         VerticalAlignment = VerticalAlignment.Center
                     }
                     : TableVisuals.Chip(signal.Value, colors[index], 31);
+                cell.HorizontalAlignment=HorizontalAlignment.Center;
+                cell.VerticalAlignment=VerticalAlignment.Center;
                 Grid.SetColumn(cell, index + 1);
                 row.Children.Add(cell);
             }
@@ -703,7 +705,8 @@ public partial class MainWindow : Window
                 Background = new SolidColorBrush(Color.FromArgb(130, 56, 38, 36)),
                 CornerRadius = new CornerRadius(5),
                 Padding = new Thickness(4),
-                Child = row
+                Child = row,
+                Margin = new Thickness(0,0,0,4)
             });
         }
     }

@@ -240,6 +240,10 @@ public class DifficultyTests
         var vote=proposal.Special!.Proposal!.Id;
         foreach(var p in new[]{c,d})lobby.Apply(lobby.Code,p.SessionToken,new(GameAction.VoteComplice){ExpectedGameId=game.GameId,ExpectedHeist=2,ProposalId=vote,Accepted=true});
         Assert.Single(lobby.GetGame(lobby.Code,c.SessionToken).Special!.PrivateHints);
+        var shown=Assert.Single(lobby.GetGame(lobby.Code,c.SessionToken).Special!.ShownCards);
+        Assert.Equal(b.PlayerId,shown.SourceId);Assert.Equal(game.Players.Single(p=>p.Id==b.PlayerId).Hand[0],shown.Card);
+        foreach(var other in new[]{b,d})Assert.Empty(lobby.GetGame(lobby.Code,other.SessionToken).Special!.ShownCards);
+
         foreach(var p in new[]{b,d})Assert.Empty(lobby.GetGame(lobby.Code,p.SessionToken).Special!.PrivateHints);
         foreach(var p in new[]{b,c,d})Assert.All(lobby.GetGame(lobby.Code,p.SessionToken).Players.Where(x=>x.Id!=p.PlayerId),x=>Assert.Empty(x.Hand));
     }

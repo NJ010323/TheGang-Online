@@ -7,6 +7,7 @@ namespace Model.Game;
 
 public sealed record DifficultyState(GameDifficulty Difficulty, string? Permanent, string[] Active, int[] Effractions, int[] Complices,
     bool ResumeActive=true, bool? PreviousSucceeded=null);
+public sealed record PrivatelyShownCard(Guid SourceId,string SourceName,ICard Card);
 public sealed record CompliceProposal(Guid Id, Guid Target, Guid? Recipient, int Rank, int CardIndex, Guid[] Accepted);
 
 public partial class Game
@@ -26,6 +27,8 @@ public partial class Game
     private readonly Dictionary<(Guid Player,string Kind),int> _guesses = [];
     private readonly Dictionary<Guid,List<string>> _privateHints = [];
     private readonly List<string> _publicHints = [];
+    private readonly Dictionary<Guid,List<PrivatelyShownCard>> _shownCards = [];
+    public IReadOnlyList<PrivatelyShownCard> ShownCards(Guid viewer) => _shownCards.TryGetValue(viewer,out var cards)?cards.ToArray():[];
     public GameDifficulty Difficulty { get; private set; }
     public int AlarmLimit => Difficulty == GameDifficulty.Gangster ? 2 : 3;
     public IReadOnlyList<string> ActiveSpecialCards => _activeSpecialCards.ToArray();
@@ -81,7 +84,7 @@ public partial class Game
     private void PrepareSpecialCards()
     {
         _compliceUsed=false; _bigArmsPlayer=null; _discardPlayer=null; _forbiddenDiscard=-1;
-        Proposal=null; SetupKind=null; SpecialFailureReason=null; _setupChoices.Clear(); _guesses.Clear(); _privateHints.Clear(); _publicHints.Clear();
+        Proposal=null; SetupKind=null; SpecialFailureReason=null; _setupChoices.Clear(); _guesses.Clear(); _privateHints.Clear(); _shownCards.Clear(); _publicHints.Clear();
         if (_restoreSpecials) { _restoreSpecials=false; return; }
         if (HeistNumber==1)
         {
@@ -198,7 +201,9 @@ public partial class Game
             case "C01":
                 var recipient=proposal.Recipient!.Value;
                 if(!_privateHints.ContainsKey(recipient))_privateHints[recipient]=[];
-                _privateHints[recipient].Add($"Informateur — {p.Name} vous montre : {p.Hand[proposal.CardIndex]}."); break;
+                _privateHints[recipient].Add($"Informateur — {p.Name} vous montre : {p.Hand[proposal.CardIndex]}.");
+                if(!_shownCards.ContainsKey(recipient))_shownCards[recipient]=[];
+                _shownCards[recipient].Add(new(p.Id,p.Name,p.Hand[proposal.CardIndex])); break;
             case "C02":
                 var cards=p.Hand.Concat(_communityCards).ToArray();
                 var category=cards.Length>=5?PokerHandEvaluator.Evaluate(p.Hand,_communityCards).Rank:

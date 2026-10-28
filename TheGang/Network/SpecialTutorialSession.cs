@@ -41,17 +41,17 @@ public sealed class SpecialTutorialSession
         {
             if(Complete)return "Parcours terminé. Choisissez un autre atelier ou invitez vos amis.";
             if(!_introduced)return "Lisez l’objectif puis démarrez cet atelier.";
-            if(Game.SetupKind is not null)return "Dans l’espace d’effets sous le plateau, faites votre choix privé. Mila et Noé feront le leur.";
-            if(Game.DiscardPlayer is not null)return "Sous le plateau, choisissez la carte à défausser.";
-            if(Game.Proposal is not null)return "Mila propose de vous montrer une carte secrète. Sous le plateau, votez pour recevoir cette information privée.";
-            if(PowerPending)return "Sous le plateau, proposez le pouvoir. Vos complices simulés voteront pour l’accepter.";
+            if(Game.SetupKind is not null)return "Dans le volet d’effets, faites votre choix privé. Mila et Noé feront le leur.";
+            if(Game.DiscardPlayer is not null)return "Dans le volet d’effets, choisissez la carte à défausser.";
+            if(Game.Proposal is not null)return "Mila propose de vous montrer une carte secrète. Dans le volet d’effets, votez pour recevoir cette information privée.";
+            if(PowerPending)return "Dans le volet d’effets, proposez le pouvoir. Vos complices simulés voteront pour l’accepter.";
             if(!_reviewed)return "Lisez la carte agrandie dans Cartes & effets, puis confirmez sa lecture.";
             if(NeedsLockTest)return "Testez la reprise du jeton sombre avec le bouton ci-dessous : le moteur doit la refuser.";
             if(Result)return "Consultez le débrief, puis passez à l’atelier suivant.";
             if(Game.Phase==GamePhase.Showdown)
             {
                 if(Game.NextPlayerToRevealId is null)return "Vérifiez l’ordre des mains avec la roue du plateau.";
-                if(Game.NextPlayerToRevealId==Game.GuessTarget&&CardId is "E04" or "E09")return "Sous le plateau, validez l’estimation commune avant de révéler la dernière main. "+GuessHelp;
+                if(Game.NextPlayerToRevealId==Game.GuessTarget&&CardId is "E04" or "E09")return "Dans le volet d’effets, validez l’estimation commune avant de révéler la dernière main. "+GuessHelp;
                 return "Révélez la main suivante avec la roue du plateau.";
             }
             return Game.Players[0].SignalToken is null?$"Glissez le jeton {SuggestedToken} vers votre main.":Game.AllChoicesConfirmed?"Utilisez la roue du plateau pour poursuivre.":"Confirmez votre choix dans la roue. Mila et Noé confirmeront aussi.";

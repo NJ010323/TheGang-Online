@@ -28,5 +28,5 @@ public sealed partial class HostedLobby
         game.PublicHints.ToArray(),game.PrivateHints(viewer).ToArray(),game.Proposal is {} p?new(p.Id,p.Target,p.Recipient,p.Rank,p.Accepted):null,
         game.GuessTarget,game.Guesses(viewer).ToDictionary(x=>x.Key,x=>x.Value),new(){["E04"]=game.GuessVotes("E04"),["E09"]=game.GuessVotes("E09")},
         Enumerable.Range(1,game.Players.Count).Where(game.IsTokenLocked).ToArray(),game.AlarmLimit)
-        { FailureReason=game.SpecialFailureReason };
+        { FailureReason=game.SpecialFailureReason, ShownCards=game.ShownCards(viewer).Select(c=>new ShownCardSnapshot(c.SourceId,c.SourceName,CardSnapshotFor(c.Card))).ToArray() };
 }

@@ -53,7 +53,7 @@ public partial class MainWindow
         RenderTableDossier(game);
         var s=game.Special;
         GameDifficultyButton.Visibility=s is null?Visibility.Collapsed:Visibility.Visible;
-        SpecialCardsPanel.Children.Clear();SpecialCardsPanel.Visibility=s?.ActiveCards.Length>0?Visibility.Visible:Visibility.Collapsed;
+        SpecialCardsPanel.Children.Clear();SpecialCardsPanel.Visibility=Visibility.Collapsed;
         if(s is null)return;
         var noticeKey=$"{game.GameId}/{game.HeistNumber}/{s.SetupKind}/{s.DiscardPlayer}/{s.Proposal?.Id}";
         if(s.ActiveCards.Length>0&&noticeKey!=_specialNoticeKey)
@@ -65,7 +65,7 @@ public partial class MainWindow
         if(s.PrivateHints.Length>0&&privateKey!=_specialPrivateKey)
         {
             _specialPrivateKey=privateKey;
-            ShowNotice("Une information privée apparaît dans votre espace d’effets.",autoHide:false);
+            if(s.ShownCards.Count==0)ShowNotice("Une information privée apparaît dans votre volet d’effets.",autoHide:false);
         }
         if(!s.CompliceUsed&&s.ActiveCards.Any(id=>id.StartsWith('C'))&&game.AllChoicesConfirmed&&
             game.Phase is GamePhase.PreFlop or GamePhase.Flop or GamePhase.Turn or GamePhase.River)
@@ -74,22 +74,8 @@ public partial class MainWindow
             if(RoundTransitionOverlay.Visibility!=Visibility.Visible)TokenActionWheel.Visibility=Visibility.Visible;
         }
         GameDifficultyButton.Content=$"{DifficultyRules.Name(s.Difficulty)} · {s.AlarmLimit} alarmes · Cartes & effets";
-        if(s.ActiveCards.Length>0)
-        {
-            SpecialCardsPanel.Children.Add(SpecialText("CARTES ACTIVES · CLIQUEZ POUR AGRANDIR",11));
-            var row=new WrapPanel();
-            foreach(var id in s.ActiveCards)
-            {
-                var def=SpecialCards.Get(id);
-                var stack=new StackPanel();stack.Children.Add(SpecialImage(id,65));
-                stack.Children.Add(SpecialText(def.Name,11));
-                var button=SpecialButton("",()=>{OpenSpecialInterface();ShowSpecialDetail(def);});button.Content=stack;button.Width=112;row.Children.Add(button);
-            }
-            SpecialCardsPanel.Children.Add(row);
-            var required=s.SetupKind is not null||s.DiscardPlayer is not null||s.Proposal is not null||game.Phase==GamePhase.Showdown&&game.NextPlayerToRevealId==s.GuessTarget&&(s.ActiveCards.Contains("E04")||s.ActiveCards.Contains("E09"));
-            SpecialCardsPanel.Children.Add(SpecialButton(required?"ACTION SPÉCIALE REQUISE →":"Lire / utiliser les cartes →",OpenSpecialInterface));
-            if(required) TokenActionHint.Text="CARTE SPÉCIALE · DÉCISION SOUS LE PLATEAU";
-        }
+        var required=s.SetupKind is not null||s.DiscardPlayer is not null||s.Proposal is not null||game.Phase==GamePhase.Showdown&&game.NextPlayerToRevealId==s.GuessTarget&&(s.ActiveCards.Contains("E04")||s.ActiveCards.Contains("E09"));
+        if(required)TokenActionHint.Text="CARTE SPÉCIALE · DÉCISION SOUS LE PLATEAU";
         foreach(var value in s.LockedTokens)
         {
             if(!_visibleTokenSources.TryGetValue(value,out var chip))continue;
@@ -149,7 +135,7 @@ public partial class MainWindow
     }
     private ComboBox SpecialChoice(IEnumerable<(string Label,object Value)> items)
     {
-        var box=new ComboBox{Style=(Style)FindResource("HeistChoice"),Margin=new Thickness(0,0,10,12),MinHeight=36,MinWidth=180,FontSize=16,Background=SpecialBrush("#36252A"),Foreground=SpecialBrush("#EAD8B8"),BorderBrush=SpecialBrush("#D9AD60")};
+        var box=new ComboBox{FontFamily=new FontFamily("Georgia"),Style=(Style)FindResource("HeistChoice"),Margin=new Thickness(0,0,10,12),MinHeight=36,MinWidth=180,FontSize=16,Background=SpecialBrush("#36252A"),Foreground=SpecialBrush("#EAD8B8"),BorderBrush=SpecialBrush("#D9AD60")};
         foreach(var item in items)box.Items.Add(new ComboBoxItem{Content=item.Label,Tag=item.Value,Background=SpecialBrush("#36252A"),Foreground=SpecialBrush("#EAD8B8"),Padding=new Thickness(8)});box.SelectedIndex=0;return box;
     }
     private static object? Choice(ComboBox box)=>(box.SelectedItem as ComboBoxItem)?.Tag;
@@ -206,14 +192,27 @@ public partial class MainWindow
         var complice=special.ActiveCards.FirstOrDefault(id=>id.StartsWith('C'));
         if(complice is null||special.CompliceUsed||game.Phase is not (GamePhase.PreFlop or GamePhase.Flop or GamePhase.Turn or GamePhase.River))return;
         body.Children.Add(SpecialText("PROPOSER L’UTILISATION DU COMPLICE",20));
-        body.Children.Add(SpecialText("Désignez le bénéficiaire et demandez l’accord de toute la table. Si tous les jetons sont confirmés, retirez une confirmation pour utiliser le pouvoir."));
-        var targetBox=SpecialChoice(game.Players.Where(p=>complice!="C01"||p.Id==self.Id).Select(p=>(p.Name,(object)p.Id)));body.Children.Add(targetBox);
+        body.Children.Add(SpecialText(complice=="C01"?"Choisissez le destinataire, puis la carte à lui montrer. La bande doit donner son accord.":"Choisissez le bénéficiaire et demandez l’accord de la bande."));
+        var targetBox=SpecialChoice(game.Players.Where(p=>complice!="C01"||p.Id==self.Id).Select(p=>(p.Name,(object)p.Id)));if(complice!="C01")body.Children.Add(targetBox);
         var recipientBox=SpecialChoice(game.Players.Where(p=>p.Id!=self.Id).Select(p=>(p.Name,(object)p.Id)));
         var rankBox=SpecialChoice(Enumerable.Range(1,13).Select(n=>(n==1?"As":n.ToString(),(object)n)));
         var cardBox=SpecialChoice(self.Hand.Select((c,i)=>($"Carte {i+1} · {c.Rank} {c.Suit}",(object)i)));
-        if(complice=="C01"){body.Children.Add(SpecialText("Destinataire puis carte à montrer :"));body.Children.Add(recipientBox);body.Children.Add(cardBox);}
+        var selectedCard=0;
+        if(complice=="C01")
+        {
+            body.Children.Add(recipientBox);
+            var cards=new WrapPanel();var buttons=new List<Button>();
+            for(var i=0;i<self.Hand.Count;i++)
+            {
+                var index=i;var button=SpecialButton("",()=>{});button.Content=TableVisuals.Card(self.Hand[i],52,75);
+                button.BorderThickness=new Thickness(i==0?3:1);
+                button.Click+=(_,_)=>{selectedCard=index;foreach(var other in buttons)other.Opacity=.55;button.Opacity=1;};
+                button.Opacity=i==0?1:.55;buttons.Add(button);cards.Children.Add(button);
+            }
+            body.Children.Add(cards);
+        }
         if(complice=="C04")body.Children.Add(rankBox);
-        body.Children.Add(SpecialButton("Proposer au groupe",()=>SendSpecial(new(GameAction.ProposeComplice){TargetId=(Guid)Choice(targetBox)!,RecipientId=(Guid?)Choice(recipientBox),Rank=(int)Choice(rankBox)!,CardIndex=(int)Choice(cardBox)!})));
+        body.Children.Add(SpecialButton("Proposer au groupe",()=>SendSpecial(new(GameAction.ProposeComplice){TargetId=(Guid)Choice(targetBox)!,RecipientId=(Guid?)Choice(recipientBox),Rank=(int)Choice(rankBox)!,CardIndex=complice=="C01"?selectedCard:(int)Choice(cardBox)!})));
     }
     private void AddCardChoices(PlayerSnapshot self,int forbidden,Action<int> select, Panel? destination=null)
     {

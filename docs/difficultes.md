@@ -83,7 +83,7 @@ au tutoriel.
 
 ## Décisions et radio de partie
 
-Les cartes actives restent sur le tapis. Le panneau d’effets sous le plateau
+Les cartes actives restent sur le tapis. Le volet d’effets flottant et repliable sur le tapis
 présente les décisions privées, les propositions de pouvoirs, les votes et les
 estimations sans ouvrir le catalogue. Les informations privées sont affichées
 uniquement au destinataire. La Hackeuse identifie la carte piochée dans la défausse.
@@ -94,3 +94,9 @@ avec au plus un envoi par seconde et les 80 derniers messages en mémoire sur l�
 Elle ne transmet aucune main automatiquement. Les règles de communication restent
 applicables. Le chat n’est pas un journal persistant : il n’est pas transféré lors
 d’une relève d’hôte. Les tutoriels sont hors ligne et désactivent la radio.
+
+Une carte montrée par l’Informateur est transmise sous forme structurée uniquement
+à son destinataire et reste visible à gauche du tapis jusqu’au braquage suivant.
+Les décisions flottent au-dessus du plateau sans changer ses dimensions. Les
+pouvoirs facultatifs s’ouvrent à la demande ; les votes et décisions obligatoires
+ouvrent automatiquement le volet, qui peut toujours être réduit.

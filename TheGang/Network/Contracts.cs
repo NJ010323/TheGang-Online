@@ -123,7 +123,9 @@ public sealed record SpecialGameSnapshot(GameDifficulty Difficulty, string[] Act
     bool CompliceUsed, string? SetupKind, bool SetupChosen, Guid? DiscardPlayer, int ForbiddenDiscard,
     string[] PublicHints, string[] PrivateHints, CompliceVoteSnapshot? Proposal, Guid? GuessTarget,
     Dictionary<string,int> OwnGuesses, Dictionary<string,int> GuessVoteCounts, int[] LockedTokens, int AlarmLimit)
-{ public string? FailureReason { get; init; } }
+{ public string? FailureReason { get; init; } public IReadOnlyList<ShownCardSnapshot> ShownCards { get; init; } = []; }
 
 public sealed record ChatPostRequest(string Text);
 public sealed record ChatMessageSnapshot(long Sequence, Guid PlayerId, string PlayerName, string Text, DateTimeOffset SentAtUtc);
+
+public sealed record ShownCardSnapshot(Guid SourceId,string SourceName,CardSnapshot Card);
