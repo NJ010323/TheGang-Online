@@ -1,4 +1,4 @@
-using Model.Game.Cards.Interfaces;
+﻿using Model.Game.Cards.Interfaces;
 using Model.Game.Hand;
 using Model.Game.Tokens.TokenEnum;
 using Model.Game.Card.CardEnum;
@@ -49,6 +49,7 @@ public partial class Game
     public bool SetupChosen(Guid viewer) => _setupChoices.ContainsKey(viewer);
     public Guid? GuessTarget => _showdownOrder.LastOrDefault()?.Id;
     public IReadOnlyDictionary<string,int> Guesses(Guid viewer) => _guesses.Where(g => g.Key.Player == viewer).ToDictionary(g=>g.Key.Kind,g=>g.Value);
+    public IReadOnlyList<(Guid Player, string Kind, int Value)> PublicGuesses => _guesses.Select(g => (g.Key.Player, g.Key.Kind, g.Value)).ToArray();
     public int GuessVotes(string kind) => _guesses.Where(g=>g.Key.Kind==kind).Count();
     public bool HasEffraction(int number) => _activeSpecialCards.Contains($"E{number:00}");
     private bool HasComplice(int number) => _activeSpecialCards.Contains($"C{number:00}");

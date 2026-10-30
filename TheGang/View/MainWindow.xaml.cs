@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -101,8 +101,11 @@ public partial class MainWindow : Window
     private void JoinMenu_Click(object sender, RoutedEventArgs e) => ShowSetup(isHost: false);
 
     /// <summary>Choisit le formulaire hôte ou invité à partir du menu principal.</summary>
+    private bool _offlineSetup;
+
     private void ShowSetup(bool isHost)
     {
+        _offlineSetup = false;
         MenuPanel.Visibility = Visibility.Collapsed;
         EntryPanel.Visibility = Visibility.Visible;
         HostSetup.Visibility = isHost ? Visibility.Visible : Visibility.Collapsed;
@@ -237,7 +240,9 @@ public partial class MainWindow : Window
     {
         var maxPlayers = Players6Option.IsChecked == true ? 6 :
             Players5Option.IsChecked == true ? 5 : Players4Option.IsChecked == true ? 4 : 3;
-        _session = await DesktopLobbySession.CreateAsync(NicknameBox.Text, maxPlayers);
+        _session = _offlineSetup
+            ? await DesktopLobbySession.CreateOfflineAsync(NicknameBox.Text, maxPlayers)
+            : await DesktopLobbySession.CreateAsync(NicknameBox.Text, maxPlayers);
         EnterLobby();
     });
 
@@ -393,10 +398,11 @@ public partial class MainWindow : Window
         LobbyDifficultyHint.Text = DifficultyRules.Description(lobby.Difficulty);
         LobbyDetails.Text = lobby.ExpectedTransferredPlayers is { } expected
             ? $"Relève · {lobby.Players.Count}/{expected} réunis · {lobby.MaxPlayers} places · code {lobby.Code}"
+            : session.IsOffline ? $"Hors ligne   ·   {lobby.Players.Count}/{lobby.MaxPlayers} joueurs"
             : $"Code local : {lobby.Code}   ·   {lobby.Players.Count}/{lobby.MaxPlayers} joueurs";
         PlayersList.ItemsSource = lobby.Players.Select(player =>
             new LobbyPlayerDisplay(player.Name, player.Id == lobby.HostId ? "HÔTE" :
-                player.Id == session.Client.Identity?.PlayerId ? "VOUS" : string.Empty)).ToArray();
+                player.IsBot ? "◆ BOT" : player.Id == session.Client.Identity?.PlayerId ? "VOUS" : string.Empty)).ToArray();
         var allTransferred = lobby.ExpectedTransferredPlayers is null ||
             lobby.Players.Count >= lobby.ExpectedTransferredPlayers.Value;
         StartButton.IsEnabled = session.IsHost && lobby.Players.Count >= 3 &&
@@ -409,6 +415,10 @@ public partial class MainWindow : Window
         var canChangeCapacity = session.IsHost && lobby.Status == LobbyStatus.Open &&
             !lobby.AutoResumeTransferredGame && lobby.HostMigration is not
                 { Stage: HostMigrationStage.Offered or HostMigrationStage.Preparing or HostMigrationStage.Redirecting };
+        LobbyBotsPanel.Visibility = canChangeCapacity ? Visibility.Visible : Visibility.Collapsed;
+        AddBotButton.IsEnabled = canChangeCapacity && !_busy && lobby.Players.Count < lobby.MaxPlayers && lobby.ExpectedTransferredPlayers is null;
+        RemoveBotButton.IsEnabled = canChangeCapacity && !_busy && lobby.Players.Any(p => p.IsBot) && lobby.ExpectedTransferredPlayers is null;
+        InvitationLabel.Visibility = InvitationOutput.Visibility = CopyInvitationButton.Visibility = session.IsOffline ? Visibility.Collapsed : Visibility.Visible;
         LobbyCapacityPanel.Visibility = canChangeCapacity ? Visibility.Visible : Visibility.Collapsed;
         LobbyCapacityPanel.IsEnabled = canChangeCapacity && !_busy;
         var minimum = Math.Max(lobby.Players.Count, lobby.ExpectedTransferredPlayers ?? 0);

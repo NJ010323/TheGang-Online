@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Security;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -14,12 +14,15 @@ namespace Network;
 public sealed class LobbyHttpServer : IAsyncDisposable
 {
     private readonly WebApplication _app;
+    private readonly CancellationTokenSource _botStop = new();
+    private readonly Task _botLoop;
 
     private LobbyHttpServer(WebApplication app, HostedLobby lobby, Uri localAddress)
     {
         _app = app;
         Lobby = lobby;
         LocalAddress = localAddress;
+        _botLoop = RunBotsAsync(_botStop.Token);
     }
 
     /// <summary>État de partie auquel seul ce serveur donne accès.</summary>
@@ -65,7 +68,23 @@ public sealed class LobbyHttpServer : IAsyncDisposable
     }
 
     /// <summary>Arrête le serveur lorsque l'hôte ferme le jeu.</summary>
-    public async ValueTask DisposeAsync() => await _app.DisposeAsync().ConfigureAwait(false);
+    public async ValueTask DisposeAsync()
+    {
+        _botStop.Cancel();
+        await _botLoop.ConfigureAwait(false);
+        _botStop.Dispose();
+        await _app.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private async Task RunBotsAsync(CancellationToken cancellation)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(250));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellation)) Lobby.TickBots();
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+    }
 
     /// <summary>Déclare seulement les commandes nécessaires au lobby et à la partie.</summary>
     private static void MapEndpoints(WebApplication app, HostedLobby lobby)
@@ -77,6 +96,8 @@ public sealed class LobbyHttpServer : IAsyncDisposable
             .RequireRateLimiting("join");
         app.MapGet("/lobbies/{code}", (string code, HttpRequest request) =>
             Respond(() => lobby.GetLobby(code, SessionToken(request))));
+        app.MapPost("/lobbies/{code}/bots", (string code, HttpRequest request, ChangeBotCountRequest change) =>
+            Respond(() => lobby.ChangeBotCount(code, SessionToken(request), change.Count)));
         app.MapPost("/lobbies/{code}/capacity", (string code, HttpRequest request,
             ChangeLobbyCapacityRequest change) =>
             Respond(() => lobby.ChangeCapacity(code, SessionToken(request), change.MaxPlayers)));

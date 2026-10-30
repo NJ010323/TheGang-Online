@@ -1,4 +1,4 @@
-using Model.Game;
+﻿using Model.Game;
 
 namespace Network;
 
@@ -13,6 +13,7 @@ public sealed partial class HostedLobby
     private void BeginRematchVote()
     {
         _rematchAccepted.Clear();
+        _rematchAccepted.UnionWith(_bots.Keys);
         var now = _clock.GetUtcNow();
         _rematch = new RematchSnapshot(Guid.NewGuid(), now + RematchDuration, now, []);
     }

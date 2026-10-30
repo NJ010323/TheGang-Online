@@ -1,4 +1,4 @@
-using System.Net.Sockets;
+﻿using System.Net.Sockets;
 
 namespace Network;
 
@@ -24,6 +24,8 @@ public sealed class DesktopLobbySession : IAsyncDisposable
     public string Invitation { get; }
 
     /// <summary>Vrai pour l'ordinateur qui exécute le moteur et le tunnel.</summary>
+    public bool IsOffline => IsHost && _tunnel is null;
+
     public bool IsHost => _server is not null;
 
     /// <summary>Crée un lobby puis publie son serveur local par un tunnel sortant.</summary>
@@ -47,6 +49,16 @@ public sealed class DesktopLobbySession : IAsyncDisposable
             await server.DisposeAsync();
             throw;
         }
+    }
+
+    /// <summary>Même moteur et client, exclusivement en boucle locale, sans tunnel.</summary>
+    public static async Task<DesktopLobbySession> CreateOfflineAsync(string nickname, int maxPlayers,
+        CancellationToken cancellationToken = default)
+    {
+        var server = await LobbyHttpServer.StartAsync(nickname, maxPlayers, cancellationToken);
+        var client = new LobbyHttpClient(server.LocalAddress);
+        client.SetHostIdentity(server.Lobby.HostIdentity);
+        return new DesktopLobbySession(client, "Partie hors ligne · aucun code à partager", server);
     }
 
     /// <summary>Rejoint un hôte distant en utilisant le code copié depuis son jeu.</summary>

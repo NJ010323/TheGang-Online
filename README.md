@@ -1,4 +1,4 @@
-# TheGang-Online
+﻿# TheGang-Online
 
 Prototype d'application bureau pour **The Gang**, avec une logique de jeu indépendante de l'interface WPF.
 
@@ -167,3 +167,9 @@ Voir [les difficultés et les cartes](docs/difficultes.md) et
 [les notes complètes de la 0.1.0](docs/releases/v0.1.0.md).
 Les paquets publiés sont archivés dans `TheGang/artifacts/release_vX.Y.Z` ;
 `gametest` contient la version de test courante, selon les consignes d’AGENTS.md.
+
+## Bots et jeu hors ligne
+
+Le menu **Jouer hors ligne · Avec des bots** permet de jouer sans Internet ni tunnel.
+Au salon, l’hôte choisit les bots avant le départ, en local comme en ligne.
+Voir [le fonctionnement et l’architecture des bots](docs/bots.md).

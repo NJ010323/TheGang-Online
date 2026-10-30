@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Reflection;
@@ -75,13 +75,20 @@ public partial class App : Application
             var panel = new Grid { Background = new SolidColorBrush(Color.FromArgb(215, 12, 9, 13)) };
             var updatePanel = new UpdateProgressPanel { HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center };
+            using var startupCheck = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
+            var skipCheck = new Button { Content = "Jouer hors ligne · Continuer sans mise à jour",
+                Style = (Style)window.FindResource("QuietButton"), HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(20, 20, 20, 48) };
+            skipCheck.Click += (_, _) => { skipCheck.IsEnabled = false; startupCheck.Cancel(); };
             panel.Children.Add(new Viewbox { Child = updatePanel, Margin = new Thickness(24),
                 Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly });
+            panel.Children.Add(skipCheck);
             window.Content = null;
             var grid = new Grid(); grid.Children.Add(content); grid.Children.Add(panel); window.Content = grid;
             window.Closed += (_, _) => { _shutdown.Cancel(); Shutdown(); };
             window.Show();
             var health = e.Args.Contains("--update-health");
+            skipCheck.Visibility = health || File.Exists(Path.Combine(state, "journal.json")) ? Visibility.Collapsed : Visibility.Visible;
             if (File.Exists(Path.Combine(state, "journal.json")) && !health)
             {
                 updatePanel.Report(new(UpdateStage.Install, "Restauration de la version précédente…"));
@@ -93,7 +100,7 @@ public partial class App : Application
                 updatePanel.Report(new(UpdateStage.Restart, "Redémarrage du jeu…"));
                 UpdateFiles.Write(Path.Combine(state, "healthy"), new { Ready = true });
             }
-            else if (_checkLock is not null && !e.Args.Contains("--update-recovered") && File.Exists(Path.Combine(installation, "update-settings.json")))
+            else if (_checkLock is not null && !e.Args.Contains("--update-recovered") && !e.Args.Contains("--offline") && File.Exists(Path.Combine(installation, "update-settings.json")))
             {
                 try
                 {
@@ -101,14 +108,16 @@ public partial class App : Application
                     var progress = new Progress<UpdateProgress>(updatePanel.Report);
                     var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version!;
                     var current = new Version(assemblyVersion.Major, assemblyVersion.Minor, assemblyVersion.Build);
-                    var update = await new UpdateClient(http).Prepare(installation, state, current, progress, _shutdown.Token);
+                    var update = await new UpdateClient(http).Prepare(installation, state, current, progress, startupCheck.Token);
                     if (update is not null)
                     {
+                        skipCheck.IsEnabled = false;
                         updatePanel.Report(new(UpdateStage.Install, "Installation de la nouvelle version…"));
                         await Handoff(installation, state, update.Directory, update.Version, _shutdown.Token);
                         Shutdown(); return;
                     }
                 }
+                catch (OperationCanceledException) when (startupCheck.IsCancellationRequested && !_shutdown.IsCancellationRequested) { }
                 catch (Exception error) when (!_shutdown.IsCancellationRequested)
                 {
                     UpdateFiles.Log(state, "Vérification/téléchargement : " + error.GetType().Name);

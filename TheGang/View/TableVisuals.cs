@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -201,7 +201,7 @@ internal static class TableVisuals
         var identity = new Grid();
         identity.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         identity.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        identity.Children.Add(new GildedPlayerName { Text = player.Name, FontSize = 16 });
+        identity.Children.Add(new GildedPlayerName { Text = player.IsBot ? player.Name + " · BOT" : player.Name, FontSize = 16 });
         if (isSelf || isHost)
         {
             var badge = new Border

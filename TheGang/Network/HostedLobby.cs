@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Security;
 using System.Text;
 using Model.Game;
@@ -87,21 +87,21 @@ public sealed partial class HostedLobby
             if (_migration is { Stage: HostMigrationStage.Offered or HostMigrationStage.Preparing or
                 HostMigrationStage.Redirecting })
                 throw new InvalidOperationException("Une relève est déjà en cours.");
-            if (_lobby.Players.Count < 2)
+            if (!_lobby.Players.Any(p => p.Id != _lobby.HostId && !_bots.ContainsKey(p.Id)))
                 throw new InvalidOperationException("Aucun invité ne peut reprendre le rôle d'hôte.");
             if (_game?.Result is GameResult.Won or GameResult.Lost)
                 throw new InvalidOperationException("Cette partie est déjà terminée.");
 
-            var successor = _lobby.Players[1];
+            var successor = _lobby.Players.First(p => p.Id != _lobby.HostId && !_bots.ContainsKey(p.Id));
             var heistNumber = _game is null ? 0 : _game.Phase == GamePhase.HeistComplete
                 ? _game.HeistNumber + 1 : _game.HeistNumber;
             _migrationAcknowledgements.Clear();
             _migration = new HostMigrationSnapshot(Guid.NewGuid(), HostMigrationStage.Offered,
                 successor.Id, successor.Name, _clock.GetUtcNow().AddMinutes(2), null,
-                _lobby.Players.Skip(1).Select(player => player.Name).ToArray(), _lobby.MaxPlayers,
+                _lobby.Players.Where(p => p.Id != _lobby.HostId).OrderBy(p => p.Id == successor.Id ? 0 : 1).Select(player => player.Name).ToArray(), _lobby.MaxPlayers,
                 _game is not null, heistNumber, _game?.SuccessfulHeists ?? 0,
-                _game?.FailedHeists ?? 0, 0, _lobby.Players.Count)
-                { DifficultyState = _lobby.DifficultyState };
+                _game?.FailedHeists ?? 0, 0, _lobby.Players.Count - _bots.Count)
+                { DifficultyState = _lobby.DifficultyState, BotNames = _lobby.Players.Where(p => _bots.ContainsKey(p.Id)).Select(p => p.Name).ToArray() };
             CompleteAllGestures();
             return _migration;
         }
@@ -185,7 +185,10 @@ public sealed partial class HostedLobby
             EnsureHost(EnsureMember(code, sessionToken));
             if (_lobby.Status != LobbyStatus.Open || _lobby.Players.Count != 1 || _migrationSetup is not null)
                 throw new InvalidOperationException("Cette table ne peut plus être préparée pour la relève.");
-            if (setup.ExpectedPlayers is null || setup.ExpectedPlayers.Count is < 1 or > 6 ||
+            if (setup.ExpectedPlayers is null || setup.BotNames is null || setup.BotNames.Distinct(StringComparer.OrdinalIgnoreCase).Count() != setup.BotNames.Length ||
+                setup.BotNames.Any(name => !setup.ExpectedPlayers.Contains(name, StringComparer.OrdinalIgnoreCase)) ||
+                setup.BotNames.Contains(_lobby.Players[0].Name, StringComparer.OrdinalIgnoreCase) ||
+                setup.ExpectedPlayers.Count is < 1 or > 6 ||
                 setup.ExpectedPlayers.Count > _lobby.MaxPlayers ||
                 !string.Equals(setup.ExpectedPlayers[0], _lobby.Players[0].Name,
                     StringComparison.OrdinalIgnoreCase) ||
@@ -202,6 +205,9 @@ public sealed partial class HostedLobby
             if (setup.DifficultyState is not null)
                 _manager.RestoreDifficulty(Code,_lobby.HostId,setup.DifficultyState with
                 { ResumeActive=setup.WasStarted && setup.ExpectedPlayers.Count>=3 && setup.DifficultyState.ResumeActive });
+            foreach (var name in setup.BotNames)
+                AddBot(name);
+            StartTransferredGameWhenReady();
             // Une relève à moins de trois prépare un salon ouvert, jamais une partie à deux.
             // Les nouveaux invités pourront entrer une fois les joueurs transférés arrivés.
             if (setup.WasStarted && setup.ExpectedPlayers.Count < 3)
@@ -411,73 +417,79 @@ public sealed partial class HostedLobby
         lock (_sync)
         {
             var playerId = EnsureMember(code, sessionToken);
-            EnsureAllPlayersPresent();
-            var game = _game ?? throw new InvalidOperationException("La partie n'a pas commencé.");
-            switch (request.Action)
-            {
-                case GameAction.ChooseSpecialSetup:
-                case GameAction.ProposeComplice:
-                case GameAction.VoteComplice:
-                case GameAction.DiscardSpecial:
-                case GameAction.SubmitSpecialGuess:
-                    if (request.ExpectedGameId != _gameId || request.ExpectedHeist != game.HeistNumber)
-                        throw new InvalidOperationException("Cette action spéciale appartient à un ancien braquage.");
-                    ApplySpecialRequest(game,playerId,request);
-                    break;
-                case GameAction.TakeToken:
-                    var value = request.TokenValue ?? throw new ArgumentException("Valeur de jeton manquante.");
-                    var previousOwner = game.Players.FirstOrDefault(player => player.SignalToken?.Value == value);
-                    game.TakeToken(playerId, value);
-                    if (previousOwner?.Id != playerId)
-                        RecordEvent(previousOwner is null ? GameEventKind.TokenTaken : GameEventKind.TokenStolen,
-                            playerId, game, value, previousOwner?.Id, previousOwner?.Name);
-                    break;
-                case GameAction.ReturnToken:
-                    var returnedValue = game.Players.First(player => player.Id == playerId).SignalToken?.Value;
-                    game.ReturnToken(playerId);
-                    if (returnedValue is not null)
-                        RecordEvent(GameEventKind.TokenReturned, playerId, game, returnedValue);
-                    break;
-                case GameAction.ConfirmChoice:
-                    var wasConfirmed = game.Players.First(player => player.Id == playerId).IsChoiceConfirmed;
-                    game.ConfirmChoice(playerId);
-                    if (!wasConfirmed) RecordEvent(GameEventKind.ChoiceConfirmed, playerId, game);
-                    break;
-                case GameAction.WithdrawConfirmation:
-                    var wasWithdrawn = !game.Players.First(player => player.Id == playerId).IsChoiceConfirmed;
-                    game.WithdrawConfirmation(playerId);
-                    if (!wasWithdrawn) RecordEvent(GameEventKind.ConfirmationWithdrawn, playerId, game);
-                    break;
-                case GameAction.AdvanceRound:
-                    EnsureHost(playerId);
-                    AdvanceRound(game);
-                    RecordEvent(GameEventKind.RoundRevealed, playerId, game);
-                    break;
-                case GameAction.RevealNextHand:
-                    EnsureHost(playerId);
-                    var revealed = game.RevealNextHand();
-                    RecordEvent(GameEventKind.HandRevealed, revealed.PlayerId, game, revealed.TokenValue);
-                    break;
-                case GameAction.ResolveHeist:
-                    EnsureHost(playerId);
-                    var succeeded = game.ResolveHeist();
-                    RecordEvent(GameEventKind.HeistResolved, playerId, game, heistSucceeded: succeeded);
-                    if (game.Phase == GamePhase.Finished) BeginRematchVote();
-                    break;
-                case GameAction.StartNextHeist:
-                    EnsureHost(playerId);
-                    game.StartNextHeist();
-                    RecordEvent(GameEventKind.HeistStarted, playerId, game);
-                    break;
-                default: throw new ArgumentOutOfRangeException(nameof(request));
-            }
-            if (request.Action is GameAction.AdvanceRound or GameAction.ResolveHeist or GameAction.StartNextHeist)
-                CompleteAllGestures();
-            else
-                CompletePlayerGesture(playerId);
-            if (request.GestureId is { } gestureId) CompleteGesture(playerId, gestureId);
+            ApplyAs(playerId, request);
             return GameSnapshotFor(playerId);
         }
+    }
+
+    // Chemin commun aux humains authentifiés et aux bots de cette instance.
+    private void ApplyAs(Guid playerId, GameActionRequest request)
+    {
+        EnsureAllPlayersPresent();
+        var game = _game ?? throw new InvalidOperationException("La partie n'a pas commencé.");
+        switch (request.Action)
+        {
+            case GameAction.ChooseSpecialSetup:
+            case GameAction.ProposeComplice:
+            case GameAction.VoteComplice:
+            case GameAction.DiscardSpecial:
+            case GameAction.SubmitSpecialGuess:
+                if (request.ExpectedGameId != _gameId || request.ExpectedHeist != game.HeistNumber)
+                    throw new InvalidOperationException("Cette action spéciale appartient à un ancien braquage.");
+                ApplySpecialRequest(game,playerId,request);
+                break;
+            case GameAction.TakeToken:
+                var value = request.TokenValue ?? throw new ArgumentException("Valeur de jeton manquante.");
+                var previousOwner = game.Players.FirstOrDefault(player => player.SignalToken?.Value == value);
+                game.TakeToken(playerId, value);
+                if (previousOwner?.Id != playerId)
+                    RecordEvent(previousOwner is null ? GameEventKind.TokenTaken : GameEventKind.TokenStolen,
+                        playerId, game, value, previousOwner?.Id, previousOwner?.Name);
+                break;
+            case GameAction.ReturnToken:
+                var returnedValue = game.Players.First(player => player.Id == playerId).SignalToken?.Value;
+                game.ReturnToken(playerId);
+                if (returnedValue is not null)
+                    RecordEvent(GameEventKind.TokenReturned, playerId, game, returnedValue);
+                break;
+            case GameAction.ConfirmChoice:
+                var wasConfirmed = game.Players.First(player => player.Id == playerId).IsChoiceConfirmed;
+                game.ConfirmChoice(playerId);
+                if (!wasConfirmed) RecordEvent(GameEventKind.ChoiceConfirmed, playerId, game);
+                break;
+            case GameAction.WithdrawConfirmation:
+                var wasWithdrawn = !game.Players.First(player => player.Id == playerId).IsChoiceConfirmed;
+                game.WithdrawConfirmation(playerId);
+                if (!wasWithdrawn) RecordEvent(GameEventKind.ConfirmationWithdrawn, playerId, game);
+                break;
+            case GameAction.AdvanceRound:
+                EnsureHost(playerId);
+                AdvanceRound(game);
+                RecordEvent(GameEventKind.RoundRevealed, playerId, game);
+                break;
+            case GameAction.RevealNextHand:
+                EnsureHost(playerId);
+                var revealed = game.RevealNextHand();
+                RecordEvent(GameEventKind.HandRevealed, revealed.PlayerId, game, revealed.TokenValue);
+                break;
+            case GameAction.ResolveHeist:
+                EnsureHost(playerId);
+                var succeeded = game.ResolveHeist();
+                RecordEvent(GameEventKind.HeistResolved, playerId, game, heistSucceeded: succeeded);
+                if (game.Phase == GamePhase.Finished) BeginRematchVote();
+                break;
+            case GameAction.StartNextHeist:
+                EnsureHost(playerId);
+                game.StartNextHeist();
+                RecordEvent(GameEventKind.HeistStarted, playerId, game);
+                break;
+            default: throw new ArgumentOutOfRangeException(nameof(request));
+        }
+        if (request.Action is GameAction.AdvanceRound or GameAction.ResolveHeist or GameAction.StartNextHeist)
+            CompleteAllGestures();
+        else
+            CompletePlayerGesture(playerId);
+        if (request.GestureId is { } gestureId) CompleteGesture(playerId, gestureId);
     }
 
     /// <summary>Ferme un geste pour empêcher les paquets retardés de le réafficher.</summary>
@@ -622,7 +634,8 @@ public sealed partial class HostedLobby
 
     /// <summary>Construit une copie de la liste publique des membres.</summary>
     private LobbySnapshot Snapshot() =>
-        new(Code, _lobby.HostId, _lobby.MaxPlayers, _lobby.Status, _lobby.Players)
+        new(Code, _lobby.HostId, _lobby.MaxPlayers, _lobby.Status,
+            _lobby.Players.Select(p => p with { IsBot = _bots.ContainsKey(p.Id) }).ToArray())
         {
             Difficulty = _lobby.Difficulty,
             GameReturnReason = _gameReturnReason,
@@ -664,7 +677,7 @@ public sealed partial class HostedLobby
                     ?? Array.Empty<ICard>();
             return new PlayerSnapshot(player.Id, player.Name, cards.Select(CardSnapshotFor).ToArray(),
                 player.Signals.Select(signal => new SignalSnapshot(signal.Key, signal.Value.Value)).ToArray(),
-                player.SignalToken?.Value, player.IsChoiceConfirmed) { HandCount = player.Hand.Count };
+                player.SignalToken?.Value, player.IsChoiceConfirmed) { HandCount = player.Hand.Count, IsBot = _bots.ContainsKey(player.Id) };
         }).ToArray();
         return new GameSnapshot(game.Phase, game.Result, game.HeistNumber,
             game.SuccessfulHeists, game.FailedHeists, game.LastHeistSucceeded,

@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -83,7 +83,7 @@ public partial class MainWindow
             if(game.Players.Any(p=>p.CurrentToken==value))chip.IsHitTestVisible=false;
         }
         if(s.ActiveCards.Contains("E05")&&game.Phase==GamePhase.Flop){AdvanceWheelTitle.Text="LA RIVIÈRE";AdvanceWheelVerb.Text="PASSER À";}
-        var key=$"{game.GameId}/{game.HeistNumber}/{game.Phase}/{game.RevealedHands.Count}/{s.SetupKind}/{s.SetupChosen}/{s.CompliceUsed}/{s.DiscardPlayer}/{s.Proposal?.Id}/{s.Proposal?.Accepted.Length}/{string.Join(';',s.OwnGuesses)}/{string.Join(';',s.GuessVoteCounts)}/{string.Join(';',s.PublicHints)}/{string.Join(';',s.PrivateHints)}";
+        var key=$"{game.GameId}/{game.HeistNumber}/{game.Phase}/{game.RevealedHands.Count}/{s.SetupKind}/{s.SetupChosen}/{s.CompliceUsed}/{s.DiscardPlayer}/{s.Proposal?.Id}/{s.Proposal?.Accepted.Length}/{string.Join(';',s.OwnGuesses)}/{string.Join(';',s.PublicGuesses)}/{string.Join(';',s.GuessVoteCounts)}/{string.Join(';',s.PublicHints)}/{string.Join(';',s.PrivateHints)}";
         if(_specialOverlay?.Visibility==Visibility.Visible&&!_specialDetail&&key!=_specialViewKey){_specialViewKey=key;BuildSpecialInterface();}
     }
     private void BuildSpecialInterface()
@@ -183,6 +183,11 @@ public partial class MainWindow
                 if(self.Id==special.GuessTarget){body.Children.Add(SpecialText("Vous possédez le plus grand jeton rouge : ne participez pas à la discussion et ne donnez aucun indice."));continue;}
                 var choices=kind=="E04"?Enumerable.Range(1,13).Select(n=>(n==1?"As":n==11?"Valet":n==12?"Dame":n==13?"Roi":n.ToString(),(object)n)):
                     Enum.GetValues<HandRank>().Select(r=>(Model.Game.Game.HandCategoryName(r),(object)(int)r));
+                foreach(var announced in special.PublicGuesses.Where(g=>g.Kind==kind))
+                {
+                    var name=game.Players.First(p=>p.Id==announced.PlayerId).Name;
+                    body.Children.Add(SpecialText(name+" propose : "+(kind=="E09"?Model.Game.Game.HandCategoryName((HandRank)announced.Value):announced.Value==1?"As":announced.Value.ToString()),13));
+                }
                 var select=SpecialChoice(choices);body.Children.Add(select);
                 body.Children.Add(SpecialText($"{special.GuessVoteCounts.GetValueOrDefault(kind)}/{game.Players.Count-1} avis enregistrés. Tous doivent retenir la même valeur. Vous pouvez modifier votre avis avant la révélation."));
                 if(special.OwnGuesses.TryGetValue(kind,out var own))foreach(ComboBoxItem item in select.Items)if((int)item.Tag==own)select.SelectedItem=item;

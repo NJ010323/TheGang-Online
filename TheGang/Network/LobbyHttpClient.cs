@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -77,6 +77,8 @@ public sealed class LobbyHttpClient : IDisposable
         CancellationToken cancellationToken = default) =>
         PostAsync<LobbySnapshot>($"lobbies/{Code}/capacity", cancellationToken,
             new ChangeLobbyCapacityRequest(maxPlayers));
+    public Task<LobbySnapshot> ChangeBotCountAsync(int count, CancellationToken cancellationToken = default) =>
+        PostAsync<LobbySnapshot>($"lobbies/{Code}/bots", cancellationToken, new ChangeBotCountRequest(count));
     public Task<LobbySnapshot> ChangeDifficultyAsync(Model.Game.GameDifficulty difficulty, CancellationToken cancellationToken=default) =>
         PostAsync<LobbySnapshot>($"lobbies/{Code}/difficulty",cancellationToken,new ChangeDifficultyRequest(difficulty));
 

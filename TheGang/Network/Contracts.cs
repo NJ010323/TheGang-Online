@@ -1,4 +1,4 @@
-using Model.Game;
+﻿using Model.Game;
 using Model.Game.Card.CardEnum;
 using Model.Game.Hand;
 using Model.Game.Tokens.TokenEnum;
@@ -10,6 +10,7 @@ namespace Network;
 public sealed record JoinLobbyRequest(string Nickname, string InvitationSecret);
 /// <summary>Nouvelle taille demandée par l'hôte d'un lobby encore ouvert.</summary>
 public sealed record ChangeLobbyCapacityRequest(int MaxPlayers);
+public sealed record ChangeBotCountRequest(int Count);
 public sealed record ChangeDifficultyRequest(GameDifficulty Difficulty);
 /// <summary>Identité secrète à conserver dans le seul client concerné.</summary>
 public sealed record LobbyIdentity(string Code, Guid PlayerId, string SessionToken, LobbySnapshot Lobby);
@@ -38,7 +39,7 @@ public sealed record HostMigrationSnapshot(Guid Id, HostMigrationStage Stage, Gu
     IReadOnlyList<string> ExpectedPlayers, int MaxPlayers, bool WasStarted,
     int HeistNumber, int SuccessfulHeists, int FailedHeists, int AcknowledgedPlayers,
     int PlayersToRedirect)
-{ public DifficultyState? DifficultyState { get; init; } }
+{ public DifficultyState? DifficultyState { get; init; } public string[] BotNames { get; init; } = []; }
 /// <summary>Réponse du successeur à la proposition de relève.</summary>
 public sealed record HostMigrationDecision(Guid Id, bool Accepted);
 /// <summary>Invitation publiée seulement par le successeur qui a accepté la relève.</summary>
@@ -48,7 +49,7 @@ public sealed record HostMigrationReference(Guid Id);
 /// <summary>Joueurs attendus et résultats déjà acquis, installés sur le nouveau serveur.</summary>
 public sealed record HostMigrationSetup(IReadOnlyList<string> ExpectedPlayers, bool WasStarted,
     int HeistNumber, int SuccessfulHeists, int FailedHeists, string? ReturningHostName)
-{ public DifficultyState? DifficultyState { get; init; } }
+{ public DifficultyState? DifficultyState { get; init; } public string[] BotNames { get; init; } = []; }
 /// <summary>Carte transportée sous une forme sérialisable, sans interface métier.</summary>
 public sealed record CardSnapshot(CardColors Suit, int Rank);
 /// <summary>Jeton d'un joueur pendant le braquage actuel.</summary>
@@ -56,7 +57,7 @@ public sealed record SignalSnapshot(TokenColors Color, int Value);
 /// <summary>Vue d'un joueur ; seules ses propres cartes ou des cartes dévoilées sont présentes.</summary>
 public sealed record PlayerSnapshot(Guid Id, string Name, IReadOnlyList<CardSnapshot> Hand,
     IReadOnlyList<SignalSnapshot> Signals, int? CurrentToken, bool IsChoiceConfirmed)
-{ public int HandCount { get; init; } = 2; }
+{ public int HandCount { get; init; } = 2; public bool IsBot { get; init; } }
 /// <summary>Meilleure combinaison d'un joueur dont la main est déjà publique.</summary>
 public sealed record RevealedHandSnapshot(Guid PlayerId, int TokenValue, HandRank Rank,
     IReadOnlyList<int> Tiebreakers)
@@ -119,11 +120,12 @@ public sealed record GameActionRequest(GameAction Action, int? TokenValue = null
     public bool Accepted { get; init; }
 }
 public sealed record CompliceVoteSnapshot(Guid Id,Guid Target,Guid? Recipient,int Rank,Guid[] Accepted);
+public sealed record PublicGuessSnapshot(Guid PlayerId, string Kind, int Value);
 public sealed record SpecialGameSnapshot(GameDifficulty Difficulty, string[] ActiveCards, string? Permanent,
     bool CompliceUsed, string? SetupKind, bool SetupChosen, Guid? DiscardPlayer, int ForbiddenDiscard,
     string[] PublicHints, string[] PrivateHints, CompliceVoteSnapshot? Proposal, Guid? GuessTarget,
     Dictionary<string,int> OwnGuesses, Dictionary<string,int> GuessVoteCounts, int[] LockedTokens, int AlarmLimit)
-{ public string? FailureReason { get; init; } public IReadOnlyList<ShownCardSnapshot> ShownCards { get; init; } = []; }
+{ public IReadOnlyList<PublicGuessSnapshot> PublicGuesses { get; init; } = []; public string? FailureReason { get; init; } public IReadOnlyList<ShownCardSnapshot> ShownCards { get; init; } = []; }
 
 public sealed record ChatPostRequest(string Text);
 public sealed record ChatMessageSnapshot(long Sequence, Guid PlayerId, string PlayerName, string Text, DateTimeOffset SentAtUtc);

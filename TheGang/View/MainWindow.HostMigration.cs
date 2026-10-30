@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using Model.Lobby;
 using Network;
 
@@ -91,7 +91,7 @@ public partial class MainWindow
                     migration.MaxPlayers);
                 await successor.Client.ConfigureHostMigrationAsync(new HostMigrationSetup(expected,
                     migration.WasStarted, migration.HeistNumber, migration.SuccessfulHeists,
-                    migration.FailedHeists, null) { DifficultyState=migration.DifficultyState });
+                    migration.FailedHeists, null) { DifficultyState=migration.DifficultyState, BotNames=migration.BotNames });
                 await oldSession.Client.PublishHostMigrationAsync(
                     new HostMigrationDestination(migration.Id, successor.Invitation));
                 try { await oldSession.Client.AcknowledgeHostMigrationAsync(migration.Id); }
@@ -184,7 +184,7 @@ public partial class MainWindow
         var lobby = await oldSession.Client.GetLobbyAsync();
         var gameFinished = lobby.Status == LobbyStatus.Started &&
             (await oldSession.Client.GetGameAsync()).Phase == Model.Game.GamePhase.Finished;
-        if (lobby.Players.Count < 2 || gameFinished)
+        if (!lobby.Players.Any(p => p.Id != lobby.HostId && !p.IsBot) || gameFinished)
         {
             // Sans successeur (ou après la fin de la partie), la sortie confirmée
             // suit le chemin ordinaire. RunAsync est déjà actif ici.

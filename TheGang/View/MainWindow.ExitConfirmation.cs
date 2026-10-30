@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Windows;
 
 namespace View;
@@ -34,7 +34,7 @@ public partial class MainWindow
         if (intent != ExitIntent.Application && _session is null) return;
         _pendingExit = intent;
         var isHost = _session?.IsHost == true;
-        var canOfferRelief = isHost && _lastLobbySnapshot?.Players.Count > 1 &&
+        var canOfferRelief = isHost && _lastLobbySnapshot?.Players.Any(p => p.Id != _lastLobbySnapshot.HostId && !p.IsBot) == true &&
             _lastRenderedPhase != Model.Game.GamePhase.Finished;
         var gameStarted = GamePanel.Visibility == Visibility.Visible ||
             _lastLobbyStatus == Model.Lobby.LobbyStatus.Started;
